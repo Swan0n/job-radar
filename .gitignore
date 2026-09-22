@@ -1,0 +1,15 @@
+# Личное: ключ, база, резюме, профиль браузера
+.env
+data/
+resume/*
+!resume/.gitkeep
+*.db
+*.db-shm
+*.db-wal
+.github_token
+
+# Окружение и мусор
+.venv/
+__pycache__/
+*.pyc
+.DS_Store

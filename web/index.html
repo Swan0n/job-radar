@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Job Radar — вакансии под твоё резюме</title>
+<link rel="stylesheet" href="/static/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎯</text></svg>">
+</head>
+<body>
+
+<header class="top">
+  <div class="top-inner">
+    <div class="brand">Job Radar <span id="subtitle"></span></div>
+    <div class="progress" id="progress" hidden>
+      <div class="spinner"></div><span id="progress-text"></span>
+    </div>
+    <button class="btn ghost" id="btn-settings">Настройки</button>
+    <button class="btn primary" id="btn-scan">Обновить сейчас</button>
+  </div>
+  <nav class="tabs" id="tabs"></nav>
+</header>
+
+<main>
+  <div id="notices"></div>
+
+  <div class="toolbar">
+    <input class="search" id="search" type="search" placeholder="Поиск по названию, компании и описанию…">
+    <select id="source-filter">
+      <option value="">Все источники</option>
+    </select>
+  </div>
+
+  <div id="list"></div>
+</main>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
