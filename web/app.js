@@ -303,8 +303,9 @@ function renderList() {
       const btn = el('button', 'btn primary', 'Запустить первый сбор');
       btn.onclick = () => startScan(true);
       empty.append(btn);
-    } else if (state.period === 'today') {
-      empty.append(el('p', null, `Сегодня на вкладке «${tab.label}» новых вакансий не нашлось. Выбери «За всё время», чтобы увидеть остальные.`));
+    } else if (state.period) {
+      const when = $('#period').selectedOptions[0].textContent.toLowerCase();
+      empty.append(el('p', null, `На вкладке «${tab.label}» нет вакансий, ${state.period === '1' ? 'найденных сегодня' : `найденных ${when}`}. Выбери «За всё время», чтобы увидеть остальные.`));
     } else {
       empty.append(el('p', null, `На вкладке «${tab.label}» ничего нет. Попробуй снизить порог в настройках или добавить поисковые запросы.`));
     }
@@ -342,10 +343,12 @@ async function loadList() {
   if (state.search) params.set('search', state.search);
   if (state.source) params.set('source', state.source);
   if (state.sort !== 'score') params.set('sort', state.sort);
-  if (state.period === 'today') {
-    const midnight = new Date();
-    midnight.setHours(0, 0, 0, 0);
-    params.set('since', midnight.toISOString());
+  if (state.period) {
+    // считаем календарными днями: «за 3 дня» — сегодня и два предыдущих дня
+    const since = new Date();
+    since.setHours(0, 0, 0, 0);
+    since.setDate(since.getDate() - (Number(state.period) - 1));
+    params.set('since', since.toISOString());
   }
   try {
     const data = await api(`/api/vacancies?${params}`);
