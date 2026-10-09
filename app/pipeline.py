@@ -29,18 +29,19 @@ class Progress:
 
     def __init__(self) -> None:
         self.running = False
-        self.stage = "ожидание"
-        self.detail = ""
+        # stage — ключ этапа, params — подстановки; текст собирает интерфейс на своём языке
+        self.stage = "idle"
+        self.params: dict[str, Any] = {}
         self.found = 0
         self.scored = 0
         self.errors: list[str] = []
 
-    def set(self, stage: str, detail: str = "") -> None:
-        self.stage, self.detail = stage, detail
-        log.info("[%s] %s", stage, detail)
+    def set(self, stage: str, **params: Any) -> None:
+        self.stage, self.params = stage, params
+        log.info("[%s] %s", stage, params)
 
     def snapshot(self) -> dict[str, Any]:
-        return {"running": self.running, "stage": self.stage, "detail": self.detail,
+        return {"running": self.running, "stage": self.stage, "params": self.params,
                 "found": self.found, "scored": self.scored, "errors": self.errors[-8:]}
 
 
@@ -99,14 +100,14 @@ async def collect(settings: Settings, profile: dict[str, Any],
                 if module is None:
                     continue
                 if module.NEEDS_BROWSER and browser is None:
-                    PROGRESS.set("запуск браузера", "для сайтов за Cloudflare")
+                    PROGRESS.set("browser")
                     browser = Browser()
                     await browser.start()
 
                 fetcher = browser if module.NEEDS_BROWSER else http
                 for query in queries:
                     for page in range(1, settings.max_pages_per_query + 1):
-                        PROGRESS.set("сбор", f"{name}: «{query}», страница {page}")
+                        PROGRESS.set("collect", source=name, query=query, page=page)
                         try:
                             jobs = await module.list_jobs(fetcher, query, page)
                         except Exception as e:
@@ -172,9 +173,10 @@ async def score_all(vacancies: list[dict[str, Any]], profile: dict[str, Any],
 
     for start in range(0, len(vacancies), SCORE_BATCH):
         chunk = vacancies[start:start + SCORE_BATCH]
-        PROGRESS.set("оценка", f"{start + len(chunk)} из {len(vacancies)}")
+        PROGRESS.set("score", done=start + len(chunk), total=len(vacancies))
         try:
-            results = await llm.score_vacancies(profile, chunk, model=model)
+            results = await llm.score_vacancies(profile, chunk, model=model,
+                                                lang=settings.ui_lang)
         except Exception as e:
             msg = f"оценка пачки: {type(e).__name__}: {str(e)[:120]}"
             PROGRESS.errors.append(msg)
@@ -221,7 +223,7 @@ async def run_scan(first_run: bool = False) -> dict[str, Any]:
 
         max_age = _lookback_days(settings, first_run)
         posts = await collect(settings, profile, max_age)
-        PROGRESS.set("сохранение", f"{len(posts)} вакансий")
+        PROGRESS.set("save", n=len(posts))
 
         new_ids: list[int] = []
         for post in posts:
@@ -245,7 +247,7 @@ async def run_scan(first_run: bool = False) -> dict[str, Any]:
                 dropped += 1
         kept = kept[:settings.max_details_per_run]
 
-        PROGRESS.set("загрузка описаний", f"{len(kept)} вакансий")
+        PROGRESS.set("details", n=len(kept))
         await fetch_details(kept, settings)
 
         scored = await score_all(kept, profile, settings)
@@ -265,12 +267,12 @@ async def run_scan(first_run: bool = False) -> dict[str, Any]:
                     f"{fresh_good} подходящих на {settings.threshold}% и выше",
                     subtitle="Job Radar",
                 )
-        PROGRESS.set("готово", f"оценено {scored}, подходящих {counts['primary']}")
+        PROGRESS.set("done", scored=scored, good=counts["primary"])
         return stats
 
     except Exception as e:
         db.finish_run(run_id, False, stats, f"{type(e).__name__}: {e}")
-        PROGRESS.set("ошибка", str(e)[:200])
+        PROGRESS.set("error", message=str(e)[:200])
         PROGRESS.errors.append(str(e)[:200])
         raise
     finally:

@@ -10,6 +10,8 @@ DEFAULT_WEIGHTS = {"skills": 40, "experience": 35, "conditions": 25, "domain": 0
 
 ALL_SOURCES = ["work.ua", "robota.ua", "djinni.co", "dou.ua", "linkedin"]
 
+UI_LANGS = ["ru", "uk", "en"]
+
 
 @dataclass
 class Settings:
@@ -52,6 +54,9 @@ class Settings:
     timezone: str = "Europe/Kyiv"
     notify_macos: bool = True
 
+    # --- язык интерфейса; на нём же модель пишет вердикты и чипы новых оценок ---
+    ui_lang: str = "ru"
+
     def normalized_weights(self) -> dict[str, float]:
         """Приводит веса к сумме 1.0, даже если из интерфейса пришла ерунда."""
         w = {k: max(0, int(self.weights.get(k, 0))) for k in DEFAULT_WEIGHTS}
@@ -85,6 +90,8 @@ class Settings:
         # добиваем словари на случай, если в БД лежит версия со старым набором ключей
         s.weights = {**DEFAULT_WEIGHTS, **(s.weights or {})}
         s.sources_enabled = {**{k: True for k in ALL_SOURCES}, **(s.sources_enabled or {})}
+        if s.ui_lang not in UI_LANGS:
+            s.ui_lang = cls.ui_lang
         try:
             s.max_details_per_run = max(10, min(int(s.max_details_per_run), 1000))
         except (TypeError, ValueError):
