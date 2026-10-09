@@ -19,7 +19,7 @@ const SOURCE_LABELS = {
   'dou.ua': 'dou', 'linkedin': 'linkedin',
 };
 
-const state = { tab: 'primary', search: '', source: '', sort: loadSort(), app: null, items: [], polling: null };
+const state = { tab: 'primary', search: '', source: '', sort: loadSort(), period: '', app: null, items: [], polling: null };
 
 function loadSort() {
   try { return localStorage.getItem('sort') === 'new' ? 'new' : 'score'; } catch { return 'score'; }
@@ -303,6 +303,8 @@ function renderList() {
       const btn = el('button', 'btn primary', 'Запустить первый сбор');
       btn.onclick = () => startScan(true);
       empty.append(btn);
+    } else if (state.period === 'today') {
+      empty.append(el('p', null, `Сегодня на вкладке «${tab.label}» новых вакансий не нашлось. Выбери «За всё время», чтобы увидеть остальные.`));
     } else {
       empty.append(el('p', null, `На вкладке «${tab.label}» ничего нет. Попробуй снизить порог в настройках или добавить поисковые запросы.`));
     }
@@ -340,6 +342,11 @@ async function loadList() {
   if (state.search) params.set('search', state.search);
   if (state.source) params.set('source', state.source);
   if (state.sort !== 'score') params.set('sort', state.sort);
+  if (state.period === 'today') {
+    const midnight = new Date();
+    midnight.setHours(0, 0, 0, 0);
+    params.set('since', midnight.toISOString());
+  }
   try {
     const data = await api(`/api/vacancies?${params}`);
     state.items = data.items;
@@ -630,6 +637,7 @@ $('#search').oninput = (e) => {
   searchTimer = setTimeout(loadList, 280);
 };
 $('#source-filter').onchange = (e) => { state.source = e.target.value; loadList(); };
+$('#period').onchange = (e) => { state.period = e.target.value; loadList(); };
 $('#sort').value = state.sort;
 $('#sort').onchange = (e) => {
   state.sort = e.target.value;

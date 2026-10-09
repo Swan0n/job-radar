@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -97,18 +98,25 @@ VISIBLE = ["new", "saved", "applied", "interview", "rejected"]
 @app.get("/api/vacancies")
 async def vacancies(tab: str = "primary", search: str | None = None,
                     source: str | None = None, sort: str = "score",
-                    limit: int = 300) -> dict[str, Any]:
+                    since: str | None = None, limit: int = 300) -> dict[str, Any]:
     settings = current_settings()
     if tab not in TABS:
         raise HTTPException(400, f"неизвестная вкладка: {tab}")
     if sort not in ("score", "new"):
         raise HTTPException(400, f"неизвестная сортировка: {sort}")
+    if since:
+        # first_seen хранится в UTC как isoformat(timespec="seconds") — приводим к тому же виду,
+        # чтобы строковое сравнение в SQLite было корректным
+        try:
+            since = datetime.fromisoformat(since).astimezone(timezone.utc).isoformat(timespec="seconds")
+        except ValueError:
+            raise HTTPException(400, f"неверная дата: {since}")
 
     params = TABS[tab](settings)
     params.setdefault("statuses", VISIBLE)
     items = db.list_vacancies(
         search=search or None,
-        sources=[source] if source else None, sort=sort,
+        sources=[source] if source else None, since=since, sort=sort,
         limit=min(limit, 500), **params,
     )
     return {"items": items, "count": len(items)}
