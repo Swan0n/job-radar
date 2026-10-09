@@ -131,11 +131,12 @@ class StatusPayload(BaseModel):
 @app.post("/api/vacancies/{vacancy_id}/status")
 async def set_status(vacancy_id: int, payload: StatusPayload) -> dict[str, Any]:
     try:
-        db.set_status(vacancy_id, payload.status, payload.note)
+        applied_at = db.set_status(vacancy_id, payload.status, payload.note)
     except ValueError as e:
         raise HTTPException(400, str(e))
     settings = current_settings()
-    return {"ok": True, "counts": db.counts_by_tab(settings.threshold, settings.secondary_threshold)}
+    return {"ok": True, "applied_at": applied_at,
+            "counts": db.counts_by_tab(settings.threshold, settings.secondary_threshold)}
 
 
 # -------------------------------------------------------------- кавер-леттеры

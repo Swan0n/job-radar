@@ -70,6 +70,17 @@ function timeAgo(iso) {
   return new Date(iso).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
 }
 
+function shortDate(iso) {
+  return new Date(iso).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
+}
+
+function statusText(item) {
+  const label = STATUS_LABELS[item.status];
+  if (!item.applied_at) return label;
+  const date = shortDate(item.applied_at);
+  return item.status === 'applied' ? `${label} ${date}` : `${label} · отклик ${date}`;
+}
+
 function isNew(item) {
   return (Date.now() - new Date(item.first_seen).getTime()) < 36 * 3600 * 1000;
 }
@@ -206,9 +217,13 @@ function renderCard(item) {
   meta.append(el('span', 'src', SOURCE_LABELS[item.source] || item.source));
   const when = item.posted_at || item.first_seen;
   if (when) meta.append(el('span', null, timeAgo(when)));
-  if (item.status && item.status !== 'new') {
-    meta.append(el('span', 'chip', STATUS_LABELS[item.status]));
-  }
+  const statusChip = el('span', 'chip');
+  const renderStatusChip = () => {
+    statusChip.textContent = statusText(item);
+    if (item.status && item.status !== 'new') meta.append(statusChip);
+    else statusChip.remove();
+  };
+  renderStatusChip();
 
   main.append(title, meta);
   if (item.summary) main.append(el('p', 'summary', item.summary));
@@ -258,6 +273,9 @@ function renderCard(item) {
         method: 'POST', body: JSON.stringify({ status: statusSel.value }),
       });
       state.app.counts = res.counts;
+      item.status = statusSel.value;
+      item.applied_at = res.applied_at ?? null;
+      renderStatusChip();
       renderTabs();
       toast(`Статус: ${STATUS_LABELS[statusSel.value]}`);
       if (statusSel.value === 'hidden' && state.tab !== 'hidden') card.remove();

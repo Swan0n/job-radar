@@ -47,7 +47,8 @@ CREATE TABLE IF NOT EXISTS statuses (
     vacancy_id    INTEGER PRIMARY KEY REFERENCES vacancies(id) ON DELETE CASCADE,
     status        TEXT NOT NULL DEFAULT 'new',
     note          TEXT,
-    updated_at    TEXT NOT NULL
+    updated_at    TEXT NOT NULL,
+    applied_at    TEXT             -- когда откликнулся; переживает переход в interview/rejected
 );
 
 CREATE TABLE IF NOT EXISTS cover_letters (
@@ -106,6 +107,12 @@ def connect() -> sqlite3.Connection:
 def init_db() -> None:
     with connect() as conn:
         conn.executescript(SCHEMA)
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(statuses)")}
+        if "applied_at" not in cols:
+            conn.execute("ALTER TABLE statuses ADD COLUMN applied_at TEXT")
+            # для старых откликов точной даты нет — берём время последней смены статуса
+            conn.execute("UPDATE statuses SET applied_at = updated_at "
+                         "WHERE status IN ('applied', 'interview')")
 
 
 # ---------------------------------------------------------------- настройки
@@ -263,7 +270,7 @@ def list_vacancies(min_score: float = 0, max_score: float = 101,
                    limit: int = 500) -> list[dict[str, Any]]:
     sql = [
         "SELECT v.*, m.score, m.breakdown, m.matched, m.missing, m.summary, m.red_flags,",
-        "       s.status, s.note, (c.vacancy_id IS NOT NULL) AS has_letter",
+        "       s.status, s.note, s.applied_at, (c.vacancy_id IS NOT NULL) AS has_letter",
         "FROM vacancies v",
         "JOIN matches m ON m.vacancy_id = v.id",
         "LEFT JOIN statuses s ON s.vacancy_id = v.id",
@@ -306,16 +313,29 @@ def list_vacancies(min_score: float = 0, max_score: float = 101,
     return out
 
 
-def set_status(vacancy_id: int, status: str, note: str | None = None) -> None:
+def set_status(vacancy_id: int, status: str, note: str | None = None) -> str | None:
+    """Меняет статус и возвращает дату отклика (applied_at), если она есть."""
     if status not in STATUSES:
         raise ValueError(f"недопустимый статус: {status}")
+    ts = now()
     with connect() as conn:
         conn.execute(
-            "INSERT INTO statuses (vacancy_id, status, note, updated_at) VALUES (?,?,?,?) "
+            "INSERT INTO statuses (vacancy_id, status, note, updated_at, applied_at) "
+            "VALUES (?,?,?,?,?) "
             "ON CONFLICT(vacancy_id) DO UPDATE SET status = excluded.status, "
-            "note = COALESCE(excluded.note, statuses.note), updated_at = excluded.updated_at",
-            (vacancy_id, status, note, now()),
+            "note = COALESCE(excluded.note, statuses.note), updated_at = excluded.updated_at, "
+            # дата отклика ставится один раз, сохраняется при отказе и сбрасывается,
+            # если статус откатили назад (new/saved/hidden)
+            "applied_at = CASE "
+            "  WHEN excluded.status IN ('applied', 'interview') "
+            "    THEN COALESCE(statuses.applied_at, excluded.applied_at) "
+            "  WHEN excluded.status = 'rejected' THEN statuses.applied_at "
+            "  ELSE NULL END",
+            (vacancy_id, status, note, ts, ts if status in ("applied", "interview") else None),
         )
+        row = conn.execute("SELECT applied_at FROM statuses WHERE vacancy_id = ?",
+                           (vacancy_id,)).fetchone()
+    return row["applied_at"]
 
 
 def get_cover_letter(vacancy_id: int) -> dict[str, Any] | None:
