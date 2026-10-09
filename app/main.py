@@ -13,7 +13,8 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+# override=True: ключ из .env важнее старого ANTHROPIC_API_KEY из ~/.zshrc.
+load_dotenv(Path(__file__).resolve().parent.parent / ".env", override=True)
 
 from . import db, llm, resume, scheduler          # noqa: E402
 from .config import ALL_SOURCES, Settings         # noqa: E402
@@ -95,16 +96,19 @@ VISIBLE = ["new", "saved", "applied", "interview", "rejected"]
 
 @app.get("/api/vacancies")
 async def vacancies(tab: str = "primary", search: str | None = None,
-                    source: str | None = None, limit: int = 300) -> dict[str, Any]:
+                    source: str | None = None, sort: str = "score",
+                    limit: int = 300) -> dict[str, Any]:
     settings = current_settings()
     if tab not in TABS:
         raise HTTPException(400, f"неизвестная вкладка: {tab}")
+    if sort not in ("score", "new"):
+        raise HTTPException(400, f"неизвестная сортировка: {sort}")
 
     params = TABS[tab](settings)
     params.setdefault("statuses", VISIBLE)
     items = db.list_vacancies(
         search=search or None,
-        sources=[source] if source else None,
+        sources=[source] if source else None, sort=sort,
         limit=min(limit, 500), **params,
     )
     return {"items": items, "count": len(items)}

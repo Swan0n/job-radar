@@ -22,7 +22,9 @@ def client():
     global _client
     if _client is None:
         import anthropic
-        _client = anthropic.AsyncAnthropic()
+        # Пробелы и переносы строк вокруг ключа дают 401 «API key is invalid».
+        key = (os.environ.get("ANTHROPIC_API_KEY") or "").strip() or None
+        _client = anthropic.AsyncAnthropic(api_key=key)
     return _client
 
 

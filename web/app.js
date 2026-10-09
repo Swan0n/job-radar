@@ -19,7 +19,11 @@ const SOURCE_LABELS = {
   'dou.ua': 'dou', 'linkedin': 'linkedin',
 };
 
-const state = { tab: 'primary', search: '', source: '', app: null, items: [], polling: null };
+const state = { tab: 'primary', search: '', source: '', sort: loadSort(), app: null, items: [], polling: null };
+
+function loadSort() {
+  try { return localStorage.getItem('sort') === 'new' ? 'new' : 'score'; } catch { return 'score'; }
+}
 
 // ------------------------------------------------------------------ утилиты
 
@@ -317,6 +321,7 @@ async function loadList() {
   const params = new URLSearchParams({ tab: state.tab });
   if (state.search) params.set('search', state.search);
   if (state.source) params.set('source', state.source);
+  if (state.sort !== 'score') params.set('sort', state.sort);
   try {
     const data = await api(`/api/vacancies?${params}`);
     state.items = data.items;
@@ -607,6 +612,12 @@ $('#search').oninput = (e) => {
   searchTimer = setTimeout(loadList, 280);
 };
 $('#source-filter').onchange = (e) => { state.source = e.target.value; loadList(); };
+$('#sort').value = state.sort;
+$('#sort').onchange = (e) => {
+  state.sort = e.target.value;
+  try { localStorage.setItem('sort', state.sort); } catch { /* приватный режим */ }
+  loadList();
+};
 $('#btn-scan').onclick = () => startScan(!state.app?.last_run);
 $('#btn-settings').onclick = () => { if (state.app) openSettings(); };
 
