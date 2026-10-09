@@ -26,7 +26,7 @@ const I18N = {
     'header.lang': 'Язык интерфейса',
     'toolbar.search': 'Поиск по названию, компании и описанию…',
     'toolbar.allSources': 'Все источники',
-    'period.all': 'За всё время', 'period.1': 'Найдены сегодня', 'period.3': 'За 3 дня', 'period.7': 'За 7 дней',
+    'period.all': 'За всё время', 'period.1': 'За сегодня', 'period.3': 'За 3 дня', 'period.7': 'За 7 дней',
     'sort.score': 'По совпадению', 'sort.new': 'Сначала новые',
 
     'time.min': '{n} мин назад', 'time.hour': '{n} ч назад', 'time.day': '{n} дн назад',
@@ -121,7 +121,7 @@ const I18N = {
     'header.lang': 'Мова інтерфейсу',
     'toolbar.search': 'Пошук за назвою, компанією та описом…',
     'toolbar.allSources': 'Усі джерела',
-    'period.all': 'За весь час', 'period.1': 'Знайдені сьогодні', 'period.3': 'За 3 дні', 'period.7': 'За 7 днів',
+    'period.all': 'За весь час', 'period.1': 'За сьогодні', 'period.3': 'За 3 дні', 'period.7': 'За 7 днів',
     'sort.score': 'За збігом', 'sort.new': 'Спочатку нові',
 
     'time.min': '{n} хв тому', 'time.hour': '{n} год тому', 'time.day': '{n} дн тому',
@@ -216,7 +216,7 @@ const I18N = {
     'header.lang': 'Interface language',
     'toolbar.search': 'Search title, company and description…',
     'toolbar.allSources': 'All sources',
-    'period.all': 'All time', 'period.1': 'Found today', 'period.3': 'Last 3 days', 'period.7': 'Last 7 days',
+    'period.all': 'All time', 'period.1': 'Today', 'period.3': 'Last 3 days', 'period.7': 'Last 7 days',
     'sort.score': 'Best match', 'sort.new': 'Newest first',
 
     'time.min': '{n} min ago', 'time.hour': '{n} h ago', 'time.day': '{n} d ago',
