@@ -151,7 +151,7 @@ function renderNotices() {
   }
   if (app.unscored > 0 && !app.progress?.running) {
     add('info', `Ещё ${app.unscored} вакансий ждут оценки`,
-        'За один прогон оценивается ограниченная пачка, чтобы не жечь токены. Нажми «Обновить сейчас», чтобы разобрать остаток.',
+        `За один прогон оценивается не больше ${app.settings?.max_details_per_run ?? 120} вакансий, чтобы не жечь токены. Нажми «Разобрать» или увеличь лимит в настройках.`,
         'Разобрать', () => startScan(false));
   }
   const errs = app.progress?.errors || [];
@@ -551,6 +551,12 @@ function openSettings() {
   pages.type = 'number'; pages.min = 1; pages.max = 10; pages.value = s.max_pages_per_query;
   add(field('Страниц на запрос', pages, 'Больше страниц — глубже охват и дольше прогон.'));
 
+  const perRun = el('input');
+  perRun.type = 'number'; perRun.min = 10; perRun.max = 1000; perRun.step = 10;
+  perRun.value = s.max_details_per_run;
+  add(field('Вакансий на оценку за прогон', perRun,
+    `Сколько вакансий за одно обновление загружать и оценивать моделью. Больше — меньше нажатий «Обновить», но дольше прогон и больше токенов (100 вакансий — примерно 0,25–0,50 $ на Sonnet).${state.app.unscored ? ` Сейчас ждут оценки: ${state.app.unscored}.` : ''}`));
+
   // --- расписание ---
   sectionTitle('Обновление и модели');
   const auto = el('label', 'check');
@@ -612,6 +618,7 @@ function openSettings() {
       weights: Object.fromEntries(Object.entries(weightInputs).map(([k, i]) => [k, Number(i.value) || 0])),
       sources_enabled: Object.fromEntries(Object.entries(srcInputs).map(([k, i]) => [k, i.checked])),
       max_pages_per_query: Number(pages.value) || 3,
+      max_details_per_run: Math.min(1000, Math.max(10, Number(perRun.value) || 120)),
       auto_schedule: autoCb.checked,
       schedule_time: timeInput.value.trim() || '09:00',
       notify_macos: notifyCb.checked,

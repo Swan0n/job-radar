@@ -85,4 +85,8 @@ class Settings:
         # добиваем словари на случай, если в БД лежит версия со старым набором ключей
         s.weights = {**DEFAULT_WEIGHTS, **(s.weights or {})}
         s.sources_enabled = {**{k: True for k in ALL_SOURCES}, **(s.sources_enabled or {})}
+        try:
+            s.max_details_per_run = max(10, min(int(s.max_details_per_run), 1000))
+        except (TypeError, ValueError):
+            s.max_details_per_run = cls.max_details_per_run
         return s
