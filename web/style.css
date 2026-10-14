@@ -151,11 +151,14 @@ select {
 
 .meta { display: flex; flex-wrap: wrap; gap: 6px 12px; font-size: 13.5px; color: var(--text-2); }
 .meta .company { font-weight: 550; color: var(--text); }
-.meta .salary { color: var(--green); font-weight: 550; }
 
 .src {
   font-size: 11.5px; font-weight: 600; letter-spacing: .02em; text-transform: uppercase;
   padding: 2px 7px; border-radius: 5px; background: var(--surface-2); color: var(--text-3);
+}
+.badge-salary {
+  font-size: 13px; font-weight: 600; padding: 1px 7px; border-radius: 5px; white-space: nowrap;
+  background: var(--green-soft); color: var(--green);
 }
 .badge-new {
   font-size: 11.5px; font-weight: 600; padding: 2px 7px; border-radius: 5px;

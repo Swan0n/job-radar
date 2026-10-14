@@ -237,12 +237,12 @@ function renderCard(item) {
   const link = el('a', null, item.title);
   link.href = item.url; link.target = '_blank'; link.rel = 'noopener';
   title.append(link);
+  if (item.salary_raw) title.append(' ', el('span', 'badge-salary', item.salary_raw));
   if (isNew(item)) title.append(' ', el('span', 'badge-new', t('card.new')));
 
   const meta = el('div', 'meta');
   if (item.company) meta.append(el('span', 'company', item.company));
   if (item.location) meta.append(el('span', null, item.location));
-  if (item.salary_raw) meta.append(el('span', 'salary', item.salary_raw));
   meta.append(el('span', 'src', SOURCE_LABELS[item.source] || item.source));
   const when = item.posted_at || item.first_seen;
   if (when) meta.append(el('span', null, timeAgo(when)));

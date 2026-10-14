@@ -118,6 +118,33 @@ def init_db() -> None:
         if "skip_reason" not in cols:
             # заполнится при следующем прогоне или refresh_prefilter()
             conn.execute("ALTER TABLE vacancies ADD COLUMN skip_reason TEXT")
+        if conn.execute("PRAGMA user_version").fetchone()[0] < 1:
+            _fix_dou_salaries(conn)
+            conn.execute("PRAGMA user_version = 1")
+
+
+def _fix_dou_salaries(conn: sqlite3.Connection) -> None:
+    """
+    Одноразовая правка старых записей DOU: прежний парсер оставлял вилку из
+    заголовка в локации, а «зарплату» искал в описании и находил там суммы
+    раундов и оценок компании. Теперь вилка только из заголовка. Заодно
+    раскодируем «&amp;» в названиях — лента экранирует их дважды.
+    """
+    import html
+    from .sources.base import clean, parse_salary
+    from .sources.dou import split_salary
+    rows = conn.execute(
+        "SELECT id, title, company, location FROM vacancies WHERE source = 'dou.ua'"
+    ).fetchall()
+    for row in rows:
+        location, salary_raw = split_salary(row["location"])
+        smin, smax, cur = parse_salary(salary_raw)
+        conn.execute(
+            "UPDATE vacancies SET title = ?, company = ?, location = ?, salary_raw = ?, "
+            "salary_min = ?, salary_max = ?, salary_cur = ? WHERE id = ?",
+            (clean(html.unescape(row["title"] or "")), clean(html.unescape(row["company"] or "")) or None,
+             location, salary_raw, smin, smax, cur, row["id"]),
+        )
 
 
 # ---------------------------------------------------------------- настройки
