@@ -30,6 +30,8 @@ const I18N = {
     'sort.score': 'По совпадению', 'sort.new': 'Сначала новые',
 
     'time.min': '{n} мин назад', 'time.hour': '{n} ч назад', 'time.day': '{n} дн назад',
+    'sub.filtered': 'отсеяно фильтром: {n}',
+    'sub.filteredTitle': 'Вакансии, которые предфильтр не пустил к оценке: стоп-слова, нет профильных слов в названии, не тот грейд. Токены на них не тратятся.',
     'sub.updated': 'обновлено {when}', 'sub.next': 'следующее {when}', 'sub.manual': 'обновление вручную',
 
     'notice.noKey': 'Нет ключа Claude API',
@@ -125,6 +127,8 @@ const I18N = {
     'sort.score': 'За збігом', 'sort.new': 'Спочатку нові',
 
     'time.min': '{n} хв тому', 'time.hour': '{n} год тому', 'time.day': '{n} дн тому',
+    'sub.filtered': 'відсіяно фільтром: {n}',
+    'sub.filteredTitle': 'Вакансії, які фільтр не пустив до оцінки: стоп-слова, немає профільних слів у назві, не той грейд. Токени на них не витрачаються.',
     'sub.updated': 'оновлено {when}', 'sub.next': 'наступне {when}', 'sub.manual': 'оновлення вручну',
 
     'notice.noKey': 'Немає ключа Claude API',
@@ -220,6 +224,8 @@ const I18N = {
     'sort.score': 'Best match', 'sort.new': 'Newest first',
 
     'time.min': '{n} min ago', 'time.hour': '{n} h ago', 'time.day': '{n} d ago',
+    'sub.filtered': 'filtered out: {n}',
+    'sub.filteredTitle': 'Jobs the pre-filter kept from scoring: stop words, no relevant words in the title, wrong level. No tokens are spent on them.',
     'sub.updated': 'updated {when}', 'sub.next': 'next {when}', 'sub.manual': 'manual updates',
 
     'notice.noKey': 'No Claude API key',

@@ -235,16 +235,7 @@ async def run_scan(first_run: bool = False) -> dict[str, Any]:
         # так подхватываются вакансии, чья оценка сорвалась в прошлый раз.
         # Порядок — по кругу между источниками, иначе один источник съедает
         # весь бюджет и остальные не оцениваются никогда.
-        pending = [db.get_vacancy(i) for i in _round_robin(db.unscored_ids_by_source())]
-        pending = [v for v in pending if v]
-
-        kept, dropped = [], 0
-        for vac in pending:
-            ok, _ = prefilter(vac, settings, profile)
-            if ok:
-                kept.append(vac)
-            else:
-                dropped += 1
+        kept, dropped = refresh_prefilter(settings, profile)
         kept = kept[:settings.max_details_per_run]
 
         PROGRESS.set("details", n=len(kept))
@@ -277,6 +268,27 @@ async def run_scan(first_run: bool = False) -> dict[str, Any]:
         raise
     finally:
         PROGRESS.running = False
+
+
+def refresh_prefilter(settings: Settings, profile: dict[str, Any]) -> tuple[list[dict[str, Any]], int]:
+    """
+    Прогоняет предфильтр по всем неоценённым вакансиям и запоминает причину
+    отказа. Каждый раз заново, а не только для новых: после смены запросов,
+    стоп-слов или резюме ранее отсеянные могут пройти, и наоборот.
+    Возвращает (прошедшие в порядке оценки, сколько отсеяно).
+    """
+    pending = [db.get_vacancy(i) for i in _round_robin(db.unscored_ids_by_source())]
+    kept: list[dict[str, Any]] = []
+    reasons: dict[int, str | None] = {}
+    for vac in pending:
+        if not vac:
+            continue
+        ok, reason = prefilter(vac, settings, profile)
+        reasons[vac["id"]] = None if ok else reason
+        if ok:
+            kept.append(vac)
+    db.set_skip_reasons(reasons)
+    return kept, len(reasons) - len(kept)
 
 
 def _count_fresh_good(new_ids: list[int], threshold: int) -> int:

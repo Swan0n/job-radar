@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS vacancies (
     query         TEXT,
     first_seen    TEXT NOT NULL,
     last_seen     TEXT NOT NULL,
+    skip_reason   TEXT,            -- почему предфильтр не пустил к оценке; NULL — пустил
     UNIQUE(source, external_id)
 );
 
@@ -113,6 +114,10 @@ def init_db() -> None:
             # для старых откликов точной даты нет — берём время последней смены статуса
             conn.execute("UPDATE statuses SET applied_at = updated_at "
                          "WHERE status IN ('applied', 'interview')")
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(vacancies)")}
+        if "skip_reason" not in cols:
+            # заполнится при следующем прогоне или refresh_prefilter()
+            conn.execute("ALTER TABLE vacancies ADD COLUMN skip_reason TEXT")
 
 
 # ---------------------------------------------------------------- настройки
@@ -249,12 +254,29 @@ def unscored_ids_by_source() -> dict[str, list[int]]:
 
 
 def unscored_count() -> int:
+    """Сколько вакансий прошли предфильтр и реально ждут оценки моделью."""
     with connect() as conn:
         row = conn.execute(
             "SELECT COUNT(*) FROM vacancies v LEFT JOIN matches m ON m.vacancy_id = v.id "
-            "WHERE m.vacancy_id IS NULL"
+            "WHERE m.vacancy_id IS NULL AND v.skip_reason IS NULL"
         ).fetchone()
     return int(row[0])
+
+
+def filtered_count() -> int:
+    """Сколько неоценённых вакансий отсеял предфильтр — их модель не увидит."""
+    with connect() as conn:
+        row = conn.execute(
+            "SELECT COUNT(*) FROM vacancies v LEFT JOIN matches m ON m.vacancy_id = v.id "
+            "WHERE m.vacancy_id IS NULL AND v.skip_reason IS NOT NULL"
+        ).fetchone()
+    return int(row[0])
+
+
+def set_skip_reasons(reasons: dict[int, str | None]) -> None:
+    with connect() as conn:
+        conn.executemany("UPDATE vacancies SET skip_reason = ? WHERE id = ?",
+                         [(reason, vid) for vid, reason in reasons.items()])
 
 
 def get_vacancy(vacancy_id: int) -> dict[str, Any] | None:

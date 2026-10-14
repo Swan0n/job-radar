@@ -19,7 +19,7 @@ load_dotenv(Path(__file__).resolve().parent.parent / ".env", override=True)
 
 from . import db, llm, resume, scheduler          # noqa: E402
 from .config import ALL_SOURCES, Settings         # noqa: E402
-from .pipeline import PROGRESS, run_scan          # noqa: E402
+from .pipeline import PROGRESS, refresh_prefilter, run_scan  # noqa: E402
 
 logging.basicConfig(level=logging.INFO,
                     format="%(asctime)s %(levelname)-7s %(name)s: %(message)s",
@@ -37,6 +37,7 @@ def current_settings() -> Settings:
 async def lifespan(app: FastAPI):
     db.init_db()
     settings = current_settings()
+    _refresh_prefilter(settings)    # фильтр мог измениться в коде — счётчики должны быть честными сразу
     scheduler.start(settings)
     task = asyncio.create_task(scheduler.catch_up_if_needed(settings))
     yield
@@ -70,6 +71,7 @@ async def state() -> dict[str, Any]:
         "has_api_key": llm.has_api_key(),
         "counts": db.counts_by_tab(settings.threshold, settings.secondary_threshold),
         "unscored": db.unscored_count(),
+        "filtered": db.filtered_count(),
         "last_run": db.last_run(),
         "next_run": scheduler.next_run_iso(),
         "progress": PROGRESS.snapshot(),
@@ -182,12 +184,23 @@ async def cover(vacancy_id: int, payload: CoverPayload) -> dict[str, Any]:
 
 # ------------------------------------------------------------------ настройки
 
+def _refresh_prefilter(settings: Settings) -> None:
+    """Пересчитать «отсеяно / ждут оценки» сразу, не дожидаясь прогона."""
+    if PROGRESS.running:
+        return                      # прогон сам пересчитает, не мешаем ему
+    profile = db.load_profile()
+    if profile and profile.get("structured"):
+        refresh_prefilter(settings, profile)
+
+
 @app.post("/api/settings")
 async def save_settings(payload: dict[str, Any]) -> dict[str, Any]:
     settings = Settings.from_dict({**(db.load_settings_raw() or {}), **payload})
     db.save_settings_raw(settings.to_dict())
     scheduler.reschedule(settings)
+    _refresh_prefilter(settings)
     return {"ok": True, "settings": settings.to_dict(),
+            "unscored": db.unscored_count(), "filtered": db.filtered_count(),
             "counts": db.counts_by_tab(settings.threshold, settings.secondary_threshold),
             "next_run": scheduler.next_run_iso()}
 
@@ -219,6 +232,7 @@ async def reload_resume() -> dict[str, Any]:
     if not settings.queries and structured.get("target_roles"):
         settings.queries = structured["target_roles"][:6]
         db.save_settings_raw(settings.to_dict())
+    _refresh_prefilter(settings)
 
     return {"ok": True, "profile": structured, "file": path.name,
             "settings": settings.to_dict()}

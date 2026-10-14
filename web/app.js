@@ -141,7 +141,9 @@ function renderSubtitle() {
   } else {
     parts.push(t('sub.manual'));
   }
+  if (app.filtered > 0) parts.push(t('sub.filtered', { n: app.filtered }));
   $('#subtitle').textContent = parts.join(' · ');
+  $('#subtitle').title = app.filtered > 0 ? t('sub.filteredTitle') : '';
 }
 
 function renderNotices() {
@@ -655,7 +657,9 @@ function openSettings() {
       state.app.settings = res.settings;
       state.app.counts = res.counts;
       state.app.next_run = res.next_run;
-      renderTabs(); renderSubtitle();
+      state.app.unscored = res.unscored;
+      state.app.filtered = res.filtered;
+      renderTabs(); renderSubtitle(); renderNotices();
       overlay.remove();
       toast(t('set.saved'));
       loadList();
