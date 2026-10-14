@@ -47,6 +47,17 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Job Radar", lifespan=lifespan)
 
 
+@app.middleware("http")
+async def revalidate_ui(request, call_next):
+    # Без этого браузер после обновления может взять свежий index.html, но старый
+    # i18n.js/app.js из кэша, и вместо подписей покажет ключи вроде «sort.salary».
+    # no-cache не запрещает кэш, а заставляет сверять ETag — для локального сервера это бесплатно.
+    response = await call_next(request)
+    if request.url.path == "/" or request.url.path.startswith("/static/"):
+        response.headers["Cache-Control"] = "no-cache"
+    return response
+
+
 @app.get("/")
 async def index() -> FileResponse:
     return FileResponse(WEB_DIR / "index.html")
