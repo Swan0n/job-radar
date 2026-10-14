@@ -104,7 +104,7 @@ async def vacancies(tab: str = "primary", search: str | None = None,
     settings = current_settings()
     if tab not in TABS:
         raise HTTPException(400, f"неизвестная вкладка: {tab}")
-    if sort not in ("score", "new"):
+    if sort not in ("score", "new", "salary"):
         raise HTTPException(400, f"неизвестная сортировка: {sort}")
     if since:
         # first_seen хранится в UTC как isoformat(timespec="seconds") — приводим к тому же виду,
@@ -119,6 +119,7 @@ async def vacancies(tab: str = "primary", search: str | None = None,
     items = db.list_vacancies(
         search=search or None,
         sources=[source] if source else None, since=since, sort=sort,
+        uah_per_usd=settings.uah_per_usd,
         limit=min(limit, 500), **params,
     )
     return {"items": items, "count": len(items)}

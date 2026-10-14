@@ -316,7 +316,7 @@ def list_vacancies(min_score: float = 0, max_score: float = 101,
                    statuses: Iterable[str] | None = None,
                    sources: Iterable[str] | None = None,
                    search: str | None = None, since: str | None = None,
-                   sort: str = "score", limit: int = 500) -> list[dict[str, Any]]:
+                   sort: str = "score", uah_per_usd: float = 42.0, limit: int = 500) -> list[dict[str, Any]]:
     sql = [
         "SELECT v.*, m.score, m.breakdown, m.matched, m.missing, m.summary, m.red_flags,",
         "       s.status, s.note, s.applied_at, (c.vacancy_id IS NOT NULL) AS has_letter",
@@ -344,6 +344,13 @@ def list_vacancies(min_score: float = 0, max_score: float = 101,
         args.append(since)
     if sort == "new":
         sql.append("ORDER BY v.first_seen DESC, m.score DESC LIMIT ?")
+    elif sort == "salary":
+        # Верхняя граница вилки в долларах — как в conditions_score; без вилки — в конец.
+        usd = ("COALESCE(v.salary_max, v.salary_min) * CASE UPPER(COALESCE(v.salary_cur, '')) "
+               "WHEN 'UAH' THEN 1.0 / ? WHEN 'EUR' THEN 1.08 ELSE 1 END")
+        sql.append(f"ORDER BY ({usd}) IS NULL, ({usd}) DESC, m.score DESC LIMIT ?")
+        rate = max(uah_per_usd, 1.0)
+        args.extend([rate, rate])
     else:
         sql.append("ORDER BY m.score DESC, v.first_seen DESC LIMIT ?")
     args.append(limit)

@@ -27,7 +27,7 @@ const I18N = {
     'toolbar.search': 'Поиск по названию, компании и описанию…',
     'toolbar.allSources': 'Все источники',
     'period.all': 'За всё время', 'period.1': 'За сегодня', 'period.3': 'За 3 дня', 'period.7': 'За 7 дней',
-    'sort.score': 'По совпадению', 'sort.new': 'Сначала новые',
+    'sort.score': 'По совпадению', 'sort.new': 'Сначала новые', 'sort.salary': 'По зарплате',
 
     'time.min': '{n} мин назад', 'time.hour': '{n} ч назад', 'time.day': '{n} дн назад',
     'sub.filtered': 'отсеяно фильтром: {n}',
@@ -124,7 +124,7 @@ const I18N = {
     'toolbar.search': 'Пошук за назвою, компанією та описом…',
     'toolbar.allSources': 'Усі джерела',
     'period.all': 'За весь час', 'period.1': 'За сьогодні', 'period.3': 'За 3 дні', 'period.7': 'За 7 днів',
-    'sort.score': 'За збігом', 'sort.new': 'Спочатку нові',
+    'sort.score': 'За збігом', 'sort.new': 'Спочатку нові', 'sort.salary': 'За зарплатою',
 
     'time.min': '{n} хв тому', 'time.hour': '{n} год тому', 'time.day': '{n} дн тому',
     'sub.filtered': 'відсіяно фільтром: {n}',
@@ -221,7 +221,7 @@ const I18N = {
     'toolbar.search': 'Search title, company and description…',
     'toolbar.allSources': 'All sources',
     'period.all': 'All time', 'period.1': 'Today', 'period.3': 'Last 3 days', 'period.7': 'Last 7 days',
-    'sort.score': 'Best match', 'sort.new': 'Newest first',
+    'sort.score': 'Best match', 'sort.new': 'Newest first', 'sort.salary': 'Highest salary',
 
     'time.min': '{n} min ago', 'time.hour': '{n} h ago', 'time.day': '{n} d ago',
     'sub.filtered': 'filtered out: {n}',

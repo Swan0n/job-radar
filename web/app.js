@@ -20,7 +20,10 @@ const SOURCE_LABELS = {
 const state = { tab: 'primary', search: '', source: '', sort: loadSort(), period: '', app: null, items: [], polling: null };
 
 function loadSort() {
-  try { return localStorage.getItem('sort') === 'new' ? 'new' : 'score'; } catch { return 'score'; }
+  try {
+    const saved = localStorage.getItem('sort');
+    return ['new', 'salary'].includes(saved) ? saved : 'score';
+  } catch { return 'score'; }
 }
 
 // ------------------------------------------------------------------ утилиты
