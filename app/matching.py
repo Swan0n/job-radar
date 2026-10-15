@@ -105,8 +105,27 @@ def prefilter(vacancy: dict[str, Any], settings: Settings,
     return True, ""
 
 
+# Подписи для чипов условий. Пишутся в БД вместе с оценкой, поэтому язык —
+# тот, что был выбран в интерфейсе в момент оценки.
+COND_TEXT = {
+    "ru": {"formats": {"remote": "Удалённо", "hybrid": "Гибрид", "office": "Офис"},
+           "bad_format": "формат «{fmt}» не подходит", "city_ok": "город подходит",
+           "city": "город: {loc}", "salary": "зарплата {sal}",
+           "salary_low": "зарплата ниже ориентира: {sal}"},
+    "uk": {"formats": {"remote": "Віддалено", "hybrid": "Гібрид", "office": "Офіс"},
+           "bad_format": "формат «{fmt}» не підходить", "city_ok": "місто підходить",
+           "city": "місто: {loc}", "salary": "зарплата {sal}",
+           "salary_low": "зарплата нижче орієнтира: {sal}"},
+    "en": {"formats": {"remote": "Remote", "hybrid": "Hybrid", "office": "Office"},
+           "bad_format": "{fmt} format doesn't fit", "city_ok": "city fits",
+           "city": "city: {loc}", "salary": "salary {sal}",
+           "salary_low": "salary below target: {sal}"},
+}
+
+
 def conditions_score(vacancy: dict[str, Any], settings: Settings) -> tuple[float, list[str], list[str]]:
     """Возвращает (оценка 0-100, что совпало, что не так)."""
+    txt = COND_TEXT.get(settings.ui_lang, COND_TEXT["ru"])
     good: list[str] = []
     bad: list[str] = []
     parts: list[float] = []
@@ -118,10 +137,10 @@ def conditions_score(vacancy: dict[str, Any], settings: Settings) -> tuple[float
     wanted = settings.work_formats or ["remote", "hybrid", "office"]
     if fmt in wanted:
         parts.append(100.0)
-        good.append({"remote": "Удалённо", "hybrid": "Гибрид", "office": "Офис"}[fmt])
+        good.append(txt["formats"][fmt])
     else:
         parts.append(15.0)
-        bad.append(f"формат «{ {'remote':'удалённо','hybrid':'гибрид','office':'офис'}[fmt] }» не подходит")
+        bad.append(txt["bad_format"].format(fmt=txt["formats"][fmt].lower()))
 
     # --- город (для удалёнки не важен) ---
     if fmt == "remote" or not settings.cities:
@@ -130,12 +149,12 @@ def conditions_score(vacancy: dict[str, Any], settings: Settings) -> tuple[float
         location = (vacancy.get("location") or "").lower()
         if any(_city_matches(c, location) for c in settings.cities):
             parts.append(100.0)
-            good.append(vacancy.get("location") or "город подходит")
+            good.append(vacancy.get("location") or txt["city_ok"])
         elif not location:
             parts.append(60.0)
         else:
             parts.append(25.0)
-            bad.append(f"город: {vacancy.get('location')}")
+            bad.append(txt["city"].format(loc=vacancy.get("location")))
 
     # --- деньги: мягкий фильтр, вакансия не прячется ---
     floor = settings.min_salary_usd()
@@ -148,11 +167,11 @@ def conditions_score(vacancy: dict[str, Any], settings: Settings) -> tuple[float
             parts.append(65.0)                       # вилка не указана — большинство вакансий в Украине
         elif top >= floor:
             parts.append(100.0)
-            good.append(f"зарплата {vacancy.get('salary_raw')}")
+            good.append(txt["salary"].format(sal=vacancy.get("salary_raw")))
         else:
             ratio = max(0.0, top / floor)
             parts.append(max(10.0, ratio * 70))
-            bad.append(f"зарплата ниже ориентира: {vacancy.get('salary_raw')}")
+            bad.append(txt["salary_low"].format(sal=vacancy.get("salary_raw")))
 
     return sum(parts) / len(parts), good, bad
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -13,11 +14,12 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+# override=True: ключ из .env важнее старого ANTHROPIC_API_KEY из ~/.zshrc.
+load_dotenv(Path(__file__).resolve().parent.parent / ".env", override=True)
 
 from . import db, llm, resume, scheduler          # noqa: E402
 from .config import ALL_SOURCES, Settings         # noqa: E402
-from .pipeline import PROGRESS, run_scan          # noqa: E402
+from .pipeline import PROGRESS, refresh_prefilter, run_scan  # noqa: E402
 
 logging.basicConfig(level=logging.INFO,
                     format="%(asctime)s %(levelname)-7s %(name)s: %(message)s",
@@ -35,6 +37,7 @@ def current_settings() -> Settings:
 async def lifespan(app: FastAPI):
     db.init_db()
     settings = current_settings()
+    _refresh_prefilter(settings)    # фильтр мог измениться в коде — счётчики должны быть честными сразу
     scheduler.start(settings)
     task = asyncio.create_task(scheduler.catch_up_if_needed(settings))
     yield
@@ -42,6 +45,17 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Job Radar", lifespan=lifespan)
+
+
+@app.middleware("http")
+async def revalidate_ui(request, call_next):
+    # Без этого браузер после обновления может взять свежий index.html, но старый
+    # i18n.js/app.js из кэша, и вместо подписей покажет ключи вроде «sort.salary».
+    # no-cache не запрещает кэш, а заставляет сверять ETag — для локального сервера это бесплатно.
+    response = await call_next(request)
+    if request.url.path == "/" or request.url.path.startswith("/static/"):
+        response.headers["Cache-Control"] = "no-cache"
+    return response
 
 
 @app.get("/")
@@ -68,6 +82,7 @@ async def state() -> dict[str, Any]:
         "has_api_key": llm.has_api_key(),
         "counts": db.counts_by_tab(settings.threshold, settings.secondary_threshold),
         "unscored": db.unscored_count(),
+        "filtered": db.filtered_count(),
         "last_run": db.last_run(),
         "next_run": scheduler.next_run_iso(),
         "progress": PROGRESS.snapshot(),
@@ -95,16 +110,27 @@ VISIBLE = ["new", "saved", "applied", "interview", "rejected"]
 
 @app.get("/api/vacancies")
 async def vacancies(tab: str = "primary", search: str | None = None,
-                    source: str | None = None, limit: int = 300) -> dict[str, Any]:
+                    source: str | None = None, sort: str = "score",
+                    since: str | None = None, limit: int = 300) -> dict[str, Any]:
     settings = current_settings()
     if tab not in TABS:
         raise HTTPException(400, f"неизвестная вкладка: {tab}")
+    if sort not in ("score", "new", "salary"):
+        raise HTTPException(400, f"неизвестная сортировка: {sort}")
+    if since:
+        # first_seen хранится в UTC как isoformat(timespec="seconds") — приводим к тому же виду,
+        # чтобы строковое сравнение в SQLite было корректным
+        try:
+            since = datetime.fromisoformat(since).astimezone(timezone.utc).isoformat(timespec="seconds")
+        except ValueError:
+            raise HTTPException(400, f"неверная дата: {since}")
 
     params = TABS[tab](settings)
     params.setdefault("statuses", VISIBLE)
     items = db.list_vacancies(
         search=search or None,
-        sources=[source] if source else None,
+        sources=[source] if source else None, since=since, sort=sort,
+        uah_per_usd=settings.uah_per_usd,
         limit=min(limit, 500), **params,
     )
     return {"items": items, "count": len(items)}
@@ -127,11 +153,12 @@ class StatusPayload(BaseModel):
 @app.post("/api/vacancies/{vacancy_id}/status")
 async def set_status(vacancy_id: int, payload: StatusPayload) -> dict[str, Any]:
     try:
-        db.set_status(vacancy_id, payload.status, payload.note)
+        applied_at = db.set_status(vacancy_id, payload.status, payload.note)
     except ValueError as e:
         raise HTTPException(400, str(e))
     settings = current_settings()
-    return {"ok": True, "counts": db.counts_by_tab(settings.threshold, settings.secondary_threshold)}
+    return {"ok": True, "applied_at": applied_at,
+            "counts": db.counts_by_tab(settings.threshold, settings.secondary_threshold)}
 
 
 # -------------------------------------------------------------- кавер-леттеры
@@ -169,12 +196,23 @@ async def cover(vacancy_id: int, payload: CoverPayload) -> dict[str, Any]:
 
 # ------------------------------------------------------------------ настройки
 
+def _refresh_prefilter(settings: Settings) -> None:
+    """Пересчитать «отсеяно / ждут оценки» сразу, не дожидаясь прогона."""
+    if PROGRESS.running:
+        return                      # прогон сам пересчитает, не мешаем ему
+    profile = db.load_profile()
+    if profile and profile.get("structured"):
+        refresh_prefilter(settings, profile)
+
+
 @app.post("/api/settings")
 async def save_settings(payload: dict[str, Any]) -> dict[str, Any]:
     settings = Settings.from_dict({**(db.load_settings_raw() or {}), **payload})
     db.save_settings_raw(settings.to_dict())
     scheduler.reschedule(settings)
+    _refresh_prefilter(settings)
     return {"ok": True, "settings": settings.to_dict(),
+            "unscored": db.unscored_count(), "filtered": db.filtered_count(),
             "counts": db.counts_by_tab(settings.threshold, settings.secondary_threshold),
             "next_run": scheduler.next_run_iso()}
 
@@ -206,6 +244,7 @@ async def reload_resume() -> dict[str, Any]:
     if not settings.queries and structured.get("target_roles"):
         settings.queries = structured["target_roles"][:6]
         db.save_settings_raw(settings.to_dict())
+    _refresh_prefilter(settings)
 
     return {"ok": True, "profile": structured, "file": path.name,
             "settings": settings.to_dict()}

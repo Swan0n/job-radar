@@ -1,25 +1,30 @@
 'use strict';
 
+// подписи вкладок и статусов — в i18n.js (tab.<id>, status.<id>)
 const TABS = [
-  { id: 'primary',   label: 'Подходящие',   countKey: 'primary' },
-  { id: 'secondary', label: 'Почти',        countKey: 'secondary' },
-  { id: 'saved',     label: 'Избранное',    countKey: 'saved' },
-  { id: 'applied',   label: 'Отклики',      countKey: 'applied' },
-  { id: 'all',       label: 'Все',          countKey: 'total' },
-  { id: 'hidden',    label: 'Скрытые',      countKey: 'hidden' },
+  { id: 'primary',   countKey: 'primary' },
+  { id: 'secondary', countKey: 'secondary' },
+  { id: 'saved',     countKey: 'saved' },
+  { id: 'applied',   countKey: 'applied' },
+  { id: 'all',       countKey: 'total' },
+  { id: 'hidden',    countKey: 'hidden' },
 ];
 
-const STATUS_LABELS = {
-  new: 'Новая', saved: 'В избранном', applied: 'Откликнулся',
-  interview: 'Собеседование', rejected: 'Отказ', hidden: 'Скрыта',
-};
+const STATUSES = ['new', 'saved', 'applied', 'interview', 'rejected', 'hidden'];
 
 const SOURCE_LABELS = {
   'work.ua': 'work.ua', 'robota.ua': 'robota.ua', 'djinni.co': 'djinni',
   'dou.ua': 'dou', 'linkedin': 'linkedin',
 };
 
-const state = { tab: 'primary', search: '', source: '', app: null, items: [], polling: null };
+const state = { tab: 'primary', search: '', source: '', sort: loadSort(), period: '', app: null, items: [], polling: null };
+
+function loadSort() {
+  try {
+    const saved = localStorage.getItem('sort');
+    return ['new', 'salary'].includes(saved) ? saved : 'score';
+  } catch { return 'score'; }
+}
 
 // ------------------------------------------------------------------ утилиты
 
@@ -37,12 +42,12 @@ async function api(path, options) {
     ...options,
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.detail || data.error || `Ошибка ${res.status}`);
+  if (!res.ok) throw new Error(data.detail || data.error || t('error.http', { status: res.status }));
   return data;
 }
 
 function toast(message) {
-  document.querySelectorAll('.toast').forEach((t) => t.remove());
+  document.querySelectorAll('.toast').forEach((node) => node.remove());
   const node = el('div', 'toast', message);
   document.body.appendChild(node);
   setTimeout(() => node.remove(), 3200);
@@ -59,15 +64,57 @@ function timeAgo(iso) {
   if (!iso) return '';
   const diff = (Date.now() - new Date(iso).getTime()) / 1000;
   if (Number.isNaN(diff)) return '';
-  if (diff < 3600) return `${Math.max(1, Math.round(diff / 60))} мин назад`;
-  if (diff < 86400) return `${Math.round(diff / 3600)} ч назад`;
+  if (diff < 3600) return t('time.min', { n: Math.max(1, Math.round(diff / 60)) });
+  if (diff < 86400) return t('time.hour', { n: Math.round(diff / 3600) });
   const days = Math.round(diff / 86400);
-  if (days < 30) return `${days} дн назад`;
-  return new Date(iso).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
+  if (days < 30) return t('time.day', { n: days });
+  return shortDate(iso);
+}
+
+function shortDate(iso) {
+  return new Date(iso).toLocaleDateString(locale(), { day: 'numeric', month: 'short' });
+}
+
+function statusText(item) {
+  const label = t(`status.${item.status}`);
+  if (!item.applied_at) return label;
+  const date = shortDate(item.applied_at);
+  return item.status === 'applied' ? `${label} ${date}` : t('status.appliedOn', { status: label, date });
 }
 
 function isNew(item) {
   return (Date.now() - new Date(item.first_seen).getTime()) < 36 * 3600 * 1000;
+}
+
+// ------------------------------------------------------------------ язык
+
+function applyStaticTexts() {
+  document.documentElement.lang = currentLang;
+  document.title = t('page.title');
+  document.querySelectorAll('[data-i18n]').forEach((node) => { node.textContent = t(node.dataset.i18n); });
+  document.querySelectorAll('[data-i18n-placeholder]').forEach((node) => { node.placeholder = t(node.dataset.i18nPlaceholder); });
+  document.querySelectorAll('[data-i18n-title]').forEach((node) => { node.title = t(node.dataset.i18nTitle); });
+}
+
+function fillLangSelect() {
+  const sel = $('#lang');
+  sel.replaceChildren();
+  for (const [code, label] of Object.entries(LANGS)) {
+    const opt = el('option', null, label);
+    opt.value = code;
+    sel.append(opt);
+  }
+  sel.value = currentLang;
+}
+
+function setLang(lang) {
+  if (!I18N[lang]) return;
+  currentLang = lang;
+  try { localStorage.setItem('lang', lang); } catch { /* приватный режим */ }
+  $('#lang').value = lang;
+  applyStaticTexts();
+  renderTabs(); renderSubtitle(); renderNotices(); renderProgress();
+  if (state.listLoaded) renderList();
 }
 
 // ------------------------------------------------------------------ шапка
@@ -78,7 +125,7 @@ function renderTabs() {
   nav.replaceChildren();
   for (const tab of TABS) {
     const btn = el('button', `tab${state.tab === tab.id ? ' active' : ''}`);
-    btn.append(tab.label);
+    btn.append(t(`tab.${tab.id}`));
     const n = counts[tab.countKey];
     if (n != null) btn.append(el('span', 'n', String(n)));
     btn.onclick = () => { state.tab = tab.id; renderTabs(); loadList(); };
@@ -90,14 +137,16 @@ function renderSubtitle() {
   const app = state.app;
   if (!app) return;
   const parts = [];
-  if (app.last_run?.finished_at) parts.push(`обновлено ${timeAgo(app.last_run.finished_at)}`);
+  if (app.last_run?.finished_at) parts.push(t('sub.updated', { when: timeAgo(app.last_run.finished_at) }));
   if (app.next_run) {
     const next = new Date(app.next_run);
-    parts.push(`следующее ${next.toLocaleString('ru-RU', { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' })}`);
+    parts.push(t('sub.next', { when: next.toLocaleString(locale(), { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' }) }));
   } else {
-    parts.push('обновление вручную');
+    parts.push(t('sub.manual'));
   }
+  if (app.filtered > 0) parts.push(t('sub.filtered', { n: app.filtered }));
   $('#subtitle').textContent = parts.join(' · ');
+  $('#subtitle').title = app.filtered > 0 ? t('sub.filteredTitle') : '';
 }
 
 function renderNotices() {
@@ -120,28 +169,26 @@ function renderNotices() {
   };
 
   if (!app.has_api_key) {
-    add('err', 'Нет ключа Claude API',
-        'Впиши ANTHROPIC_API_KEY в файл .env в папке проекта и перезапусти сервис.');
+    add('err', t('notice.noKey'), t('notice.noKeyText'));
   }
   if (!app.profile) {
     const hasFile = app.resume_file_present;
-    add('warn', 'Резюме не загружено',
-        hasFile ? `Файл ${hasFile} лежит в папке resume/ — осталось его разобрать.`
-                : 'Положи PDF или DOCX в папку resume/ рядом с проектом.',
-        hasFile ? 'Разобрать резюме' : null,
+    add('warn', t('notice.noResume'),
+        hasFile ? t('notice.resumeFile', { file: hasFile }) : t('notice.resumePut'),
+        hasFile ? t('notice.parseResume') : null,
         hasFile ? reloadResume : null);
   }
   if (app.last_run && app.last_run.ok === 0 && app.last_run.error) {
-    add('err', 'Прошлый прогон не удался', app.last_run.error);
+    add('err', t('notice.runFailed'), app.last_run.error);
   }
   if (app.unscored > 0 && !app.progress?.running) {
-    add('info', `Ещё ${app.unscored} вакансий ждут оценки`,
-        'За один прогон оценивается ограниченная пачка, чтобы не жечь токены. Нажми «Обновить сейчас», чтобы разобрать остаток.',
-        'Разобрать', () => startScan(false));
+    add('info', t('notice.unscored', { n: app.unscored }),
+        t('notice.unscoredText', { limit: app.settings?.max_details_per_run ?? 120 }),
+        t('notice.unscoredBtn'), () => startScan(false));
   }
   const errs = app.progress?.errors || [];
   if (errs.length && !app.progress.running) {
-    add('info', 'Часть источников не ответила', errs.join('; '));
+    add('info', t('notice.sourcesFailed'), errs.join('; '));
   }
 }
 
@@ -152,14 +199,14 @@ function renderProgress() {
   if (p?.running) {
     box.hidden = false;
     $('#progress-text').textContent =
-      `${p.stage}${p.detail ? ': ' + p.detail : ''} · найдено ${p.found}, оценено ${p.scored}`;
+      `${t(`progress.${p.stage}`, p.params || {})} · ${t('progress.counters', p)}`;
     scanBtn.disabled = true;
-    scanBtn.textContent = 'Идёт обновление…';
+    scanBtn.textContent = t('header.scanning');
     if (!state.polling) state.polling = setInterval(refreshState, 2000);
   } else {
     box.hidden = true;
     scanBtn.disabled = false;
-    scanBtn.textContent = 'Обновить сейчас';
+    scanBtn.textContent = t('header.scan');
     if (state.polling) { clearInterval(state.polling); state.polling = null; }
   }
 }
@@ -193,18 +240,22 @@ function renderCard(item) {
   const link = el('a', null, item.title);
   link.href = item.url; link.target = '_blank'; link.rel = 'noopener';
   title.append(link);
-  if (isNew(item)) title.append(' ', el('span', 'badge-new', 'новое'));
+  if (item.salary_raw) title.append(' ', el('span', 'badge-salary', item.salary_raw));
+  if (isNew(item)) title.append(' ', el('span', 'badge-new', t('card.new')));
 
   const meta = el('div', 'meta');
   if (item.company) meta.append(el('span', 'company', item.company));
   if (item.location) meta.append(el('span', null, item.location));
-  if (item.salary_raw) meta.append(el('span', 'salary', item.salary_raw));
   meta.append(el('span', 'src', SOURCE_LABELS[item.source] || item.source));
   const when = item.posted_at || item.first_seen;
   if (when) meta.append(el('span', null, timeAgo(when)));
-  if (item.status && item.status !== 'new') {
-    meta.append(el('span', 'chip', STATUS_LABELS[item.status]));
-  }
+  const statusChip = el('span', 'chip');
+  const renderStatusChip = () => {
+    statusChip.textContent = statusText(item);
+    if (item.status && item.status !== 'new') meta.append(statusChip);
+    else statusChip.remove();
+  };
+  renderStatusChip();
 
   main.append(title, meta);
   if (item.summary) main.append(el('p', 'summary', item.summary));
@@ -216,9 +267,9 @@ function renderCard(item) {
   if (Object.keys(b).length) {
     const bars = el('div', 'bars');
     bars.append(
-      barRow('Навыки и стек', b.skills ?? 0),
-      barRow('Опыт и грейд', b.experience ?? 0),
-      barRow('Условия', b.conditions ?? 0),
+      barRow(t('card.skills'), b.skills ?? 0),
+      barRow(t('card.experience'), b.experience ?? 0),
+      barRow(t('card.conditions'), b.conditions ?? 0),
     );
     card.append(bars);
   }
@@ -232,18 +283,18 @@ function renderCard(item) {
   // --- действия ---
   const actions = el('div', 'card-actions');
   const letterBtn = el('button', 'btn primary sm',
-    item.has_letter ? 'Письмо готово' : 'Кавер-леттер');
+    item.has_letter ? t('card.letterReady') : t('card.letter'));
   letterBtn.onclick = () => openLetter(item, letterBtn);
   actions.append(letterBtn);
 
-  const openBtn = el('button', 'btn sm', 'Открыть вакансию');
+  const openBtn = el('button', 'btn sm', t('card.open'));
   openBtn.onclick = () => window.open(item.url, '_blank', 'noopener');
   actions.append(openBtn);
 
   const statusSel = el('select');
   statusSel.className = 'btn sm';
-  for (const [value, label] of Object.entries(STATUS_LABELS)) {
-    const opt = el('option', null, label);
+  for (const value of STATUSES) {
+    const opt = el('option', null, t(`status.${value}`));
     opt.value = value;
     if (value === (item.status || 'new')) opt.selected = true;
     statusSel.append(opt);
@@ -254,8 +305,11 @@ function renderCard(item) {
         method: 'POST', body: JSON.stringify({ status: statusSel.value }),
       });
       state.app.counts = res.counts;
+      item.status = statusSel.value;
+      item.applied_at = res.applied_at ?? null;
+      renderStatusChip();
       renderTabs();
-      toast(`Статус: ${STATUS_LABELS[statusSel.value]}`);
+      toast(t('status.toast', { status: t(`status.${statusSel.value}`) }));
       if (statusSel.value === 'hidden' && state.tab !== 'hidden') card.remove();
     } catch (e) { toast(e.message); }
   };
@@ -272,17 +326,21 @@ function renderList() {
 
   if (!state.items.length) {
     const empty = el('div', 'empty');
-    const tab = TABS.find((t) => t.id === state.tab);
-    empty.append(el('h3', null, 'Пока пусто'));
+    const tab = t(`tab.${state.tab}`);
+    empty.append(el('h3', null, t('empty.title')));
     if (!state.app?.profile) {
-      empty.append(el('p', null, 'Сначала загрузи резюме — по нему считается совпадение.'));
+      empty.append(el('p', null, t('empty.noResume')));
     } else if (!state.app?.last_run) {
-      empty.append(el('p', null, 'Первый сбор ещё не запускался. Он займёт 10–20 минут и соберёт вакансии за 30 дней.'));
-      const btn = el('button', 'btn primary', 'Запустить первый сбор');
+      empty.append(el('p', null, t('empty.noRun')));
+      const btn = el('button', 'btn primary', t('empty.firstRun'));
       btn.onclick = () => startScan(true);
       empty.append(btn);
+    } else if (state.period) {
+      empty.append(el('p', null, state.period === '1'
+        ? t('empty.period1', { tab })
+        : t('empty.periodN', { tab, days: state.period })));
     } else {
-      empty.append(el('p', null, `На вкладке «${tab.label}» ничего нет. Попробуй снизить порог в настройках или добавить поисковые запросы.`));
+      empty.append(el('p', null, t('empty.tab', { tab })));
     }
     list.append(empty);
     return;
@@ -297,7 +355,11 @@ function renderList() {
 
 async function refreshState() {
   try {
+    const first = !state.app;
     state.app = await api('/api/state');
+    // язык хранится в настройках на сервере; localStorage нужен только для первой отрисовки
+    const serverLang = state.app.settings?.ui_lang;
+    if (first && serverLang && serverLang !== currentLang) setLang(serverLang);
     renderTabs(); renderSubtitle(); renderNotices(); renderProgress();
     fillSourceFilter();
   } catch (e) { console.error(e); }
@@ -317,9 +379,18 @@ async function loadList() {
   const params = new URLSearchParams({ tab: state.tab });
   if (state.search) params.set('search', state.search);
   if (state.source) params.set('source', state.source);
+  if (state.sort !== 'score') params.set('sort', state.sort);
+  if (state.period) {
+    // считаем календарными днями: «за 3 дня» — сегодня и два предыдущих дня
+    const since = new Date();
+    since.setHours(0, 0, 0, 0);
+    since.setDate(since.getDate() - (Number(state.period) - 1));
+    params.set('since', since.toISOString());
+  }
   try {
     const data = await api(`/api/vacancies?${params}`);
     state.items = data.items;
+    state.listLoaded = true;
     renderList();
   } catch (e) { toast(e.message); }
 }
@@ -327,16 +398,16 @@ async function loadList() {
 async function startScan(firstRun) {
   try {
     await api(`/api/scan?first_run=${firstRun ? 'true' : 'false'}`, { method: 'POST' });
-    toast(firstRun ? 'Первый сбор запущен — это надолго' : 'Обновление запущено');
+    toast(firstRun ? t('scan.first') : t('scan.started'));
     setTimeout(refreshState, 600);
   } catch (e) { toast(e.message); }
 }
 
 async function reloadResume() {
-  toast('Разбираю резюме…');
+  toast(t('resume.parsing'));
   try {
     const res = await api('/api/resume/reload', { method: 'POST' });
-    toast(`Резюме разобрано: ${res.profile.headline}`);
+    toast(t('resume.parsed', { headline: res.profile.headline }));
     await refreshState();
     renderList();
   } catch (e) { toast(e.message); }
@@ -373,11 +444,11 @@ function modal({ title, body, footer }) {
 
 async function openLetter(item, button) {
   const body = el('div');
-  const letter = el('div', 'letter', 'Пишу письмо под эту вакансию…');
+  const letter = el('div', 'letter', t('letter.writing'));
   body.append(letter);
 
-  const copyBtn = el('button', 'btn primary', 'Скопировать');
-  const againBtn = el('button', 'btn', 'Написать заново');
+  const copyBtn = el('button', 'btn primary', t('letter.copy'));
+  const againBtn = el('button', 'btn', t('letter.again'));
   const overlay = modal({
     title: item.title,
     body,
@@ -385,24 +456,24 @@ async function openLetter(item, button) {
   });
 
   const load = async (regenerate) => {
-    letter.textContent = regenerate ? 'Переписываю…' : 'Пишу письмо под эту вакансию…';
+    letter.textContent = regenerate ? t('letter.rewriting') : t('letter.writing');
     try {
       const res = await api(`/api/vacancies/${item.id}/cover`, {
         method: 'POST', body: JSON.stringify({ regenerate }),
       });
       letter.textContent = res.text;
       item.has_letter = true;
-      if (button) button.textContent = 'Письмо готово';
+      if (button) button.textContent = t('card.letterReady');
     } catch (e) {
-      letter.textContent = `Не получилось: ${e.message}`;
+      letter.textContent = t('letter.failed', { message: e.message });
     }
   };
 
   copyBtn.onclick = async () => {
     try {
       await navigator.clipboard.writeText(letter.textContent);
-      toast('Письмо скопировано');
-    } catch { toast('Не вышло скопировать — выдели текст вручную'); }
+      toast(t('letter.copied'));
+    } catch { toast(t('letter.copyFailed')); }
   };
   againBtn.onclick = () => load(true);
 
@@ -433,32 +504,30 @@ function openSettings() {
   const sectionTitle = (t) => add(el('div', 'section-title', t));
 
   // --- поиск ---
-  sectionTitle('Что искать');
+  sectionTitle(t('set.whatSection'));
   const queries = el('textarea');
   queries.value = (s.queries || []).join('\n');
   queries.placeholder = 'Python Developer\nBackend Engineer';
-  add(field('Поисковые запросы, по одному в строке', queries,
-    'Их вводят в поиск на джоб-бордах. Если оставить пусто, возьму роли из резюме.'));
+  add(field(t('set.queries'), queries, t('set.queriesHint')));
 
-  const exclude = textInput((s.exclude_keywords || []).join(', '), '1С, продажи, стажер');
-  add(field('Стоп-слова в названии, через запятую', exclude,
-    'Вакансии с этими словами в названии даже не оцениваются.'));
+  const exclude = textInput((s.exclude_keywords || []).join(', '), t('set.excludePh'));
+  add(field(t('set.exclude'), exclude, t('set.excludeHint')));
 
   // --- условия ---
-  sectionTitle('Условия работы');
+  sectionTitle(t('set.conditionsSection'));
   const formats = el('div', 'checks');
-  const fmtMap = { remote: 'Удалённо', hybrid: 'Гибрид', office: 'Офис' };
-  for (const [value, label] of Object.entries(fmtMap)) {
+  for (const value of ['remote', 'hybrid', 'office']) {
+    const label = t(`fmt.${value}`);
     const lab = el('label', 'check');
     const cb = el('input'); cb.type = 'checkbox'; cb.value = value;
     cb.checked = (s.work_formats || []).includes(value);
     lab.append(cb, el('span', null, label));
     formats.append(lab);
   }
-  add(field('Формат работы', formats, 'Не подходящий формат сильно снижает процент, но вакансию не прячет.'));
+  add(field(t('set.format'), formats, t('set.formatHint')));
 
   const cities = textInput((s.cities || []).join(', '), 'Київ, Львів');
-  add(field('Города, через запятую', cities, 'Для удалённых вакансий город не учитывается.'));
+  add(field(t('set.cities'), cities, t('set.citiesHint')));
 
   const money = el('div', 'row2');
   const salary = el('input'); salary.type = 'number'; salary.value = s.min_salary || 0; salary.min = 0;
@@ -469,24 +538,22 @@ function openSettings() {
     currency.append(opt);
   });
   money.append(salary, currency);
-  add(field('Зарплатный ориентир', money,
-    'Мягкий фильтр: вакансии ниже опускаются в списке, но остаются видимыми.'));
+  add(field(t('set.salary'), money, t('set.salaryHint')));
 
   // --- отбор ---
-  sectionTitle('Отбор');
+  sectionTitle(t('set.selectionSection'));
   const sliderWrap = el('div', 'slider-row');
   const slider = el('input');
   slider.type = 'range'; slider.min = 40; slider.max = 95; slider.step = 5; slider.value = s.threshold;
   const out = el('output', null, `${s.threshold}%`);
   slider.oninput = () => { out.textContent = `${slider.value}%`; };
   sliderWrap.append(slider, out);
-  add(field('Порог «подходит»', sliderWrap,
-    'Вакансии выше порога попадают на первую вкладку, от 50% до порога — на вторую.'));
+  add(field(t('set.threshold'), sliderWrap, t('set.thresholdHint')));
 
   const weightsBox = el('div', 'row2');
   const weightInputs = {};
-  const weightLabels = { skills: 'Навыки и стек', experience: 'Опыт и грейд',
-                         conditions: 'Условия', domain: 'Домен' };
+  const weightLabels = { skills: t('card.skills'), experience: t('card.experience'),
+                         conditions: t('card.conditions'), domain: t('set.domain') };
   for (const [key, label] of Object.entries(weightLabels)) {
     const input = el('input');
     input.type = 'number'; input.min = 0; input.max = 100;
@@ -497,10 +564,10 @@ function openSettings() {
     wrap.append(el('label', null, label), input);
     weightsBox.append(wrap);
   }
-  add(field('Веса измерений', weightsBox, 'Приводятся к сумме 100 автоматически.'));
+  add(field(t('set.weights'), weightsBox, t('set.weightsHint')));
 
   // --- источники ---
-  sectionTitle('Источники');
+  sectionTitle(t('set.sourcesSection'));
   const sources = el('div', 'checks');
   const srcInputs = {};
   (state.app.all_sources || []).forEach((name) => {
@@ -511,33 +578,36 @@ function openSettings() {
     lab.append(cb, el('span', null, SOURCE_LABELS[name] || name));
     sources.append(lab);
   });
-  add(field('Где искать', sources,
-    'work.ua и robota.ua требуют браузера и работают медленнее. LinkedIn — неофициальный публичный поиск, может отвалиться.'));
+  add(field(t('set.where'), sources, t('set.whereHint')));
 
   const pages = el('input');
   pages.type = 'number'; pages.min = 1; pages.max = 10; pages.value = s.max_pages_per_query;
-  add(field('Страниц на запрос', pages, 'Больше страниц — глубже охват и дольше прогон.'));
+  add(field(t('set.pages'), pages, t('set.pagesHint')));
+
+  const perRun = el('input');
+  perRun.type = 'number'; perRun.min = 10; perRun.max = 1000; perRun.step = 10;
+  perRun.value = s.max_details_per_run;
+  add(field(t('set.perRun'), perRun,
+    t('set.perRunHint') + (state.app.unscored ? t('set.perRunPending', { n: state.app.unscored }) : '')));
 
   // --- расписание ---
-  sectionTitle('Обновление и модели');
+  sectionTitle(t('set.updateSection'));
   const auto = el('label', 'check');
   const autoCb = el('input'); autoCb.type = 'checkbox'; autoCb.checked = !!s.auto_schedule;
-  auto.append(autoCb, el('span', null, 'Обновлять автоматически каждый день'));
-  add(field('Режим обновления', auto,
-    'Выключено — вакансии собираются и оцениваются только по кнопке «Обновить сейчас», и токены без спроса не тратятся.'));
+  auto.append(autoCb, el('span', null, t('set.auto')));
+  add(field(t('set.autoField'), auto, t('set.autoHint')));
 
   const timeInput = el('input');
   timeInput.type = 'text'; timeInput.value = s.schedule_time; timeInput.placeholder = '09:00';
-  const timeField = field('Время ежедневного обновления (Киев)', timeInput,
-    'Если Mac в это время спал, обновление догонится при следующем запуске.');
+  const timeField = field(t('set.time'), timeInput, t('set.timeHint'));
   timeField.hidden = !autoCb.checked;
   autoCb.onchange = () => { timeField.hidden = !autoCb.checked; };
   add(timeField);
 
   const notify = el('label', 'check');
   const notifyCb = el('input'); notifyCb.type = 'checkbox'; notifyCb.checked = !!s.notify_macos;
-  notify.append(notifyCb, el('span', null, 'Уведомление macOS, когда обновление нашло новые вакансии'));
-  add(field('Уведомления', notify));
+  notify.append(notifyCb, el('span', null, t('set.notify')));
+  add(field(t('set.notifyField'), notify));
 
   const models = el('div', 'row2');
   const modelOpts = ['claude-opus-5', 'claude-sonnet-5', 'claude-haiku-4-5'];
@@ -553,17 +623,16 @@ function openSettings() {
   const scoringModel = mkModel(s.scoring_model);
   const letterModel = mkModel(s.letter_model);
   const m1 = el('div', 'field'); m1.style.margin = '0';
-  m1.append(el('label', null, 'Оценка вакансий'), scoringModel);
+  m1.append(el('label', null, t('set.modelScoring')), scoringModel);
   const m2 = el('div', 'field'); m2.style.margin = '0';
-  m2.append(el('label', null, 'Кавер-леттеры'), letterModel);
+  m2.append(el('label', null, t('set.modelLetters')), letterModel);
   models.append(m1, m2);
-  add(field('Модели Claude', models,
-    'Оценка — самая массовая операция. Sonnet заметно дешевле Opus, качество разбора чуть ниже.'));
+  add(field(t('set.models'), models, t('set.modelsHint')));
 
   // --- сохранение ---
-  const saveBtn = el('button', 'btn primary', 'Сохранить');
-  const resumeBtn = el('button', 'btn', 'Перечитать резюме');
-  const overlay = modal({ title: 'Настройки', body, footer: [resumeBtn, saveBtn] });
+  const saveBtn = el('button', 'btn primary', t('set.save'));
+  const resumeBtn = el('button', 'btn', t('set.reloadResume'));
+  const overlay = modal({ title: t('set.title'), body, footer: [resumeBtn, saveBtn] });
 
   resumeBtn.onclick = async () => { await reloadResume(); overlay.remove(); };
 
@@ -579,6 +648,7 @@ function openSettings() {
       weights: Object.fromEntries(Object.entries(weightInputs).map(([k, i]) => [k, Number(i.value) || 0])),
       sources_enabled: Object.fromEntries(Object.entries(srcInputs).map(([k, i]) => [k, i.checked])),
       max_pages_per_query: Number(pages.value) || 3,
+      max_details_per_run: Math.min(1000, Math.max(10, Number(perRun.value) || 120)),
       auto_schedule: autoCb.checked,
       schedule_time: timeInput.value.trim() || '09:00',
       notify_macos: notifyCb.checked,
@@ -590,9 +660,11 @@ function openSettings() {
       state.app.settings = res.settings;
       state.app.counts = res.counts;
       state.app.next_run = res.next_run;
-      renderTabs(); renderSubtitle();
+      state.app.unscored = res.unscored;
+      state.app.filtered = res.filtered;
+      renderTabs(); renderSubtitle(); renderNotices();
       overlay.remove();
-      toast('Настройки сохранены');
+      toast(t('set.saved'));
       loadList();
     } catch (e) { toast(e.message); }
   };
@@ -607,8 +679,25 @@ $('#search').oninput = (e) => {
   searchTimer = setTimeout(loadList, 280);
 };
 $('#source-filter').onchange = (e) => { state.source = e.target.value; loadList(); };
+$('#period').onchange = (e) => { state.period = e.target.value; loadList(); };
+$('#sort').value = state.sort;
+$('#sort').onchange = (e) => {
+  state.sort = e.target.value;
+  try { localStorage.setItem('sort', state.sort); } catch { /* приватный режим */ }
+  loadList();
+};
 $('#btn-scan').onclick = () => startScan(!state.app?.last_run);
 $('#btn-settings').onclick = () => { if (state.app) openSettings(); };
+$('#lang').onchange = async (e) => {
+  setLang(e.target.value);
+  try {
+    const res = await api('/api/settings', { method: 'POST', body: JSON.stringify({ ui_lang: currentLang }) });
+    state.app.settings = res.settings;
+  } catch (err) { toast(err.message); }
+};
+
+fillLangSelect();
+applyStaticTexts();
 
 (async function init() {
   await refreshState();

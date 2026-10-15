@@ -22,7 +22,9 @@ def client():
     global _client
     if _client is None:
         import anthropic
-        _client = anthropic.AsyncAnthropic()
+        # Пробелы и переносы строк вокруг ключа дают 401 «API key is invalid».
+        key = (os.environ.get("ANTHROPIC_API_KEY") or "").strip() or None
+        _client = anthropic.AsyncAnthropic(api_key=key)
     return _client
 
 
@@ -57,10 +59,10 @@ class VacancyScore(BaseModel):
     skills_score: int = Field(description="0-100: покрытие требований навыками кандидата")
     experience_score: int = Field(description="0-100: соответствие грейду и годам опыта")
     domain_score: int = Field(description="0-100: близость индустрии")
-    matched: list[str] = Field(description="До 6 совпадений, коротко, по-русски")
-    missing: list[str] = Field(description="До 4 нехваток, коротко, по-русски")
+    matched: list[str] = Field(description="До 6 совпадений, коротко, на языке из инструкции")
+    missing: list[str] = Field(description="До 4 нехваток, коротко, на языке из инструкции")
     red_flags: list[str] = Field(description="Тревожные сигналы: неоплачиваемый тест, серая схема и т.п.")
-    summary: str = Field(description="Одно предложение-вердикт по-русски")
+    summary: str = Field(description="Одно предложение-вердикт на языке из инструкции")
     vacancy_language: str = Field(description="Язык текста вакансии: uk | ru | en")
 
 
@@ -104,7 +106,7 @@ SCORING_SYSTEM = """Ты оцениваешь, насколько ваканси
 отклик, который никуда не приведёт. Если в вакансии требуется то, чего у кандидата
 нет совсем, это должно ронять skills_score, а не прятаться в missing.
 
-matched, missing, red_flags и summary пиши по-русски и по делу, без воды.
+matched, missing, red_flags и summary пиши {lang} и по делу, без воды.
 Поле ref копируй из запроса в точности."""
 
 
@@ -138,9 +140,13 @@ def _vacancy_block(v: dict[str, Any], max_desc: int = 3000) -> str:
     ])
 
 
+# в каком виде язык подставляется в SCORING_SYSTEM
+SCORING_LANG = {"ru": "по-русски", "uk": "по-украински", "en": "по-английски"}
+
+
 async def score_vacancies(profile: dict[str, Any], vacancies: list[dict[str, Any]],
                           model: str = DEFAULT_SCORING_MODEL,
-                          effort: str = "low") -> list[VacancyScore]:
+                          effort: str = "low", lang: str = "ru") -> list[VacancyScore]:
     """Оценивает пачку вакансий одним запросом. Профиль кэшируется между вызовами."""
     if not vacancies:
         return []
@@ -150,7 +156,8 @@ async def score_vacancies(profile: dict[str, Any], vacancies: list[dict[str, Any
         model=model,
         max_tokens=16000,
         system=[
-            {"type": "text", "text": SCORING_SYSTEM},
+            {"type": "text", "text": SCORING_SYSTEM.replace(
+                "{lang}", SCORING_LANG.get(lang, SCORING_LANG["ru"]))},
             # Профиль одинаков во всех запросах прогона — держим его в кэше.
             {"type": "text", "text": f"Профиль кандидата:\n{_profile_block(profile)}",
              "cache_control": {"type": "ephemeral"}},

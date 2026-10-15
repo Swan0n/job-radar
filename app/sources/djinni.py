@@ -103,10 +103,14 @@ def parse_list(html: str | None, query: str) -> list[JobPost]:
         comp_el = header.select_one("span.font-weight-500, span.small.text-gray-800")
         company = clean(comp_el.get_text()) if comp_el else None
 
-        sal_el = header.select_one("span.text-body-tertiary")
-        sal_text = clean(sal_el.get_text()) if sal_el else ""
-        # «$$$$» — это скрытая вилка, а не сумма: числа в ней нет.
-        salary_raw = sal_text if any(c.isdigit() for c in sal_text) else None
+        # Открытая вилка выделена зелёным («до $9600»), скрытая — серым «$$$$»:
+        # компания её не показывает, числа в ней нет.
+        salary_raw = None
+        for sal_el in header.select(".text-success, span.text-body-tertiary"):
+            sal_text = clean(sal_el.get_text())
+            if "$" in sal_text and any(c.isdigit() for c in sal_text):
+                salary_raw = sal_text
+                break
 
         card_text = clean(card.get_text(" "))
         # «6 років досвіду», «Англійська — B2» пригодятся при оценке совпадения.

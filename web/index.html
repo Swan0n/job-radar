@@ -15,7 +15,8 @@
     <div class="progress" id="progress" hidden>
       <div class="spinner"></div><span id="progress-text"></span>
     </div>
-    <button class="btn ghost" id="btn-settings">Настройки</button>
+    <select class="btn ghost" id="lang" data-i18n-title="header.lang"></select>
+    <button class="btn ghost" id="btn-settings" data-i18n="header.settings">Настройки</button>
     <button class="btn primary" id="btn-scan">Обновить сейчас</button>
   </div>
   <nav class="tabs" id="tabs"></nav>
@@ -25,15 +26,27 @@
   <div id="notices"></div>
 
   <div class="toolbar">
-    <input class="search" id="search" type="search" placeholder="Поиск по названию, компании и описанию…">
+    <input class="search" id="search" type="search" data-i18n-placeholder="toolbar.search" placeholder="Поиск по названию, компании и описанию…">
     <select id="source-filter">
-      <option value="">Все источники</option>
+      <option value="" data-i18n="toolbar.allSources">Все источники</option>
+    </select>
+    <select id="period">
+      <option value="" data-i18n="period.all">За всё время</option>
+      <option value="1" data-i18n="period.1">За сегодня</option>
+      <option value="3" data-i18n="period.3">За 3 дня</option>
+      <option value="7" data-i18n="period.7">За 7 дней</option>
+    </select>
+    <select id="sort">
+      <option value="score" data-i18n="sort.score">По совпадению</option>
+      <option value="new" data-i18n="sort.new">Сначала новые</option>
+      <option value="salary" data-i18n="sort.salary">По зарплате</option>
     </select>
   </div>
 
   <div id="list"></div>
 </main>
 
+<script src="/static/i18n.js"></script>
 <script src="/static/app.js"></script>
 </body>
 </html>
