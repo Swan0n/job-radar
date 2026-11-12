@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -16,12 +17,51 @@ DEFAULT_SCORING_MODEL = "claude-sonnet-5"
 DEFAULT_LETTER_MODEL = "claude-sonnet-5"
 
 _client = None
+ENV_PATH = Path(__file__).resolve().parent.parent / ".env"
+
+
+class ApiKeyInvalid(RuntimeError):
+    """Anthropic отверг ключ (401). Дальше гнать запросы бессмысленно."""
+
+    code = "api_key_invalid"   # интерфейс показывает по нему понятную плашку
+
+    def __init__(self) -> None:
+        super().__init__(self.code)
+
+
+def is_auth_error(e: BaseException) -> bool:
+    import anthropic
+    return isinstance(e, anthropic.AuthenticationError)
+
+
+def reset_client() -> None:
+    """
+    Забыть клиента после 401. Новый создастся при следующем запросе и перечитает
+    .env — так исправленный ключ подхватится без перезапуска сервера.
+    """
+    global _client
+    _client = None
+
+
+async def check_key() -> None:
+    """Бесплатный запрос к списку моделей: ловим плохой ключ до долгого сбора вакансий."""
+    try:
+        await client().models.list(limit=1)
+    except Exception as e:
+        if is_auth_error(e):
+            reset_client()
+            raise ApiKeyInvalid() from e
+        # сеть, 5xx и прочее — не повод отменять прогон, оценка сама разберётся
+        log.warning("проверка ключа не удалась: %s", type(e).__name__)
 
 
 def client():
     global _client
     if _client is None:
         import anthropic
+        from dotenv import load_dotenv
+        # .env мог измениться с прошлого раза (например, после 401 ключ заменили)
+        load_dotenv(ENV_PATH, override=True)
         # Пробелы и переносы строк вокруг ключа дают 401 «API key is invalid».
         key = (os.environ.get("ANTHROPIC_API_KEY") or "").strip() or None
         _client = anthropic.AsyncAnthropic(api_key=key)

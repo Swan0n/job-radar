@@ -42,7 +42,12 @@ async function api(path, options) {
     ...options,
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.detail || data.error || t('error.http', { status: res.status }));
+  if (!res.ok) {
+    const detail = data.detail || data.error;
+    // сервер присылает коды вроде «api_key_invalid» — переводим, если знаем
+    const known = detail && (I18N[currentLang][`error.${detail}`] || I18N.ru[`error.${detail}`]);
+    throw new Error(known ? t(`error.${detail}`) : detail || t('error.http', { status: res.status }));
+  }
   return data;
 }
 
@@ -178,10 +183,15 @@ function renderNotices() {
         hasFile ? t('notice.parseResume') : null,
         hasFile ? reloadResume : null);
   }
-  if (app.last_run && app.last_run.ok === 0 && app.last_run.error) {
+  if (app.last_run && app.last_run.ok === 0 && app.last_run.error === 'api_key_invalid') {
+    add('err', t('notice.badKey'), t('notice.badKeyText'),
+        t('notice.badKeyRetry'), () => startScan(false));
+  } else if (app.last_run && app.last_run.ok === 0 && app.last_run.error) {
     add('err', t('notice.runFailed'), app.last_run.error);
   }
-  if (app.unscored > 0 && !app.progress?.running) {
+  // с недействительным ключом «Разобрать» ничего не даст — хватает плашки про ключ
+  const badKey = app.last_run?.ok === 0 && app.last_run?.error === 'api_key_invalid';
+  if (app.unscored > 0 && !app.progress?.running && !badKey) {
     add('info', t('notice.unscored', { n: app.unscored }),
         t('notice.unscoredText', { limit: app.settings?.max_details_per_run ?? 120 }),
         t('notice.unscoredBtn'), () => startScan(false));

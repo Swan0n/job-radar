@@ -41,11 +41,15 @@ const I18N = {
     'notice.resumePut': 'Положи PDF или DOCX в папку resume/ рядом с проектом.',
     'notice.parseResume': 'Разобрать резюме',
     'notice.runFailed': 'Прошлый прогон не удался',
+    'notice.badKey': 'Ключ Claude API недействителен',
+    'notice.badKeyText': 'Anthropic отклонил ключ из файла .env (ошибка 401), прогон остановлен. Создай новый ключ в Console (Settings → API keys), вставь его целиком в .env как ANTHROPIC_API_KEY=<ключ> и нажми «Проверить снова» — перезапускать сервер не нужно.',
+    'notice.badKeyRetry': 'Проверить снова',
+    'error.api_key_invalid': 'Ключ Claude API недействителен — проверь ANTHROPIC_API_KEY в файле .env.',
     'notice.unscored': (p) => plural('ru', p.n, {
       one: 'Ещё {n} вакансия ждёт оценки', few: 'Ещё {n} вакансии ждут оценки', other: 'Ещё {n} вакансий ждут оценки' }),
     'notice.unscoredText': 'За один прогон оценивается не больше {limit} вакансий, чтобы не жечь токены. Нажми «Разобрать» или увеличь лимит в настройках.',
     'notice.unscoredBtn': 'Разобрать',
-    'notice.sourcesFailed': 'Часть источников не ответила',
+    'notice.sourcesFailed': 'Часть запросов не удалась',
 
     'progress.idle': 'ожидание',
     'progress.browser': 'запуск браузера для сайтов за Cloudflare',
@@ -57,6 +61,7 @@ const I18N = {
     'progress.score': 'оценка: {done} из {total}',
     'progress.done': 'готово: оценено {scored}, подходящих {good}',
     'progress.error': 'ошибка: {message}',
+    'progress.error_key': 'ключ Claude API недействителен',
     'progress.counters': 'найдено {found}, оценено {scored}',
 
     'card.new': 'новое',
@@ -138,11 +143,15 @@ const I18N = {
     'notice.resumePut': 'Поклади PDF або DOCX у папку resume/ поруч із проєктом.',
     'notice.parseResume': 'Розібрати резюме',
     'notice.runFailed': 'Минулий прогін не вдався',
+    'notice.badKey': 'Ключ Claude API недійсний',
+    'notice.badKeyText': 'Anthropic відхилив ключ із файлу .env (помилка 401), прогін зупинено. Створи новий ключ у Console (Settings → API keys), встав його повністю в .env як ANTHROPIC_API_KEY=<ключ> і натисни «Перевірити знову» — перезапускати сервер не потрібно.',
+    'notice.badKeyRetry': 'Перевірити знову',
+    'error.api_key_invalid': 'Ключ Claude API недійсний — перевір ANTHROPIC_API_KEY у файлі .env.',
     'notice.unscored': (p) => plural('uk', p.n, {
       one: 'Ще {n} вакансія чекає оцінки', few: 'Ще {n} вакансії чекають оцінки', other: 'Ще {n} вакансій чекають оцінки' }),
     'notice.unscoredText': 'За один прогін оцінюється не більше {limit} вакансій, щоб не палити токени. Натисни «Розібрати» або збільш ліміт у налаштуваннях.',
     'notice.unscoredBtn': 'Розібрати',
-    'notice.sourcesFailed': 'Частина джерел не відповіла',
+    'notice.sourcesFailed': 'Частина запитів не вдалася',
 
     'progress.idle': 'очікування',
     'progress.browser': 'запуск браузера для сайтів за Cloudflare',
@@ -154,6 +163,7 @@ const I18N = {
     'progress.score': 'оцінка: {done} з {total}',
     'progress.done': 'готово: оцінено {scored}, підходять {good}',
     'progress.error': 'помилка: {message}',
+    'progress.error_key': 'ключ Claude API недійсний',
     'progress.counters': 'знайдено {found}, оцінено {scored}',
 
     'card.new': 'нове',
@@ -235,11 +245,15 @@ const I18N = {
     'notice.resumePut': 'Put a PDF or DOCX into the resume/ folder next to the project.',
     'notice.parseResume': 'Parse resume',
     'notice.runFailed': 'Last run failed',
+    'notice.badKey': 'Claude API key is invalid',
+    'notice.badKeyText': 'Anthropic rejected the key from the .env file (error 401), so the run was stopped. Create a new key in the Console (Settings → API keys), paste it whole into .env as ANTHROPIC_API_KEY=<key> and press “Check again” — no server restart needed.',
+    'notice.badKeyRetry': 'Check again',
+    'error.api_key_invalid': 'Claude API key is invalid — check ANTHROPIC_API_KEY in the .env file.',
     'notice.unscored': (p) => plural('en', p.n, {
       one: '{n} more job is waiting to be scored', other: '{n} more jobs are waiting to be scored' }),
     'notice.unscoredText': 'Each run scores at most {limit} jobs to save tokens. Press “Score” or raise the limit in settings.',
     'notice.unscoredBtn': 'Score',
-    'notice.sourcesFailed': 'Some sources did not respond',
+    'notice.sourcesFailed': 'Some requests failed',
 
     'progress.idle': 'idle',
     'progress.browser': 'starting the browser for Cloudflare-protected sites',
@@ -250,6 +264,7 @@ const I18N = {
     'progress.score': 'scoring: {done} of {total}',
     'progress.done': 'done: scored {scored}, good fit {good}',
     'progress.error': 'error: {message}',
+    'progress.error_key': 'Claude API key is invalid',
     'progress.counters': 'found {found}, scored {scored}',
 
     'card.new': 'new',

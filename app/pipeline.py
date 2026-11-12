@@ -178,6 +178,10 @@ async def score_all(vacancies: list[dict[str, Any]], profile: dict[str, Any],
             results = await llm.score_vacancies(profile, chunk, model=model,
                                                 lang=settings.ui_lang)
         except Exception as e:
+            if llm.is_auth_error(e):
+                # с плохим ключом каждая следующая пачка упадёт так же — останавливаемся
+                llm.reset_client()
+                raise llm.ApiKeyInvalid() from e
             msg = f"оценка пачки: {type(e).__name__}: {str(e)[:120]}"
             PROGRESS.errors.append(msg)
             log.warning(msg)
@@ -220,6 +224,7 @@ async def run_scan(first_run: bool = False) -> dict[str, Any]:
             raise ValueError("Резюме не загружено — без него оценивать не с чем.")
         if not llm.has_api_key():
             raise ValueError("Нет ключа ANTHROPIC_API_KEY: впиши его в файл .env.")
+        await llm.check_key()
 
         max_age = _lookback_days(settings, first_run)
         posts = await collect(settings, profile, max_age)
@@ -261,6 +266,11 @@ async def run_scan(first_run: bool = False) -> dict[str, Any]:
         PROGRESS.set("done", scored=scored, good=counts["primary"])
         return stats
 
+    except llm.ApiKeyInvalid as e:
+        # своя плашка в интерфейсе; в список ошибок источников не кладём
+        db.finish_run(run_id, False, stats, e.code)
+        PROGRESS.set("error_key")
+        raise
     except Exception as e:
         db.finish_run(run_id, False, stats, f"{type(e).__name__}: {e}")
         PROGRESS.set("error", message=str(e)[:200])

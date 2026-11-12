@@ -188,6 +188,7 @@ async def cover(vacancy_id: int, payload: CoverPayload) -> dict[str, Any]:
         text = await llm.write_cover_letter(profile, vac, model=settings.letter_model,
                                             extra_hint=payload.hint)
     except Exception as e:
+        _raise_if_bad_key(e)
         raise HTTPException(502, f"Claude не ответил: {type(e).__name__}: {str(e)[:200]}")
 
     db.save_cover_letter(vacancy_id, text, lang="auto")
@@ -195,6 +196,13 @@ async def cover(vacancy_id: int, payload: CoverPayload) -> dict[str, Any]:
 
 
 # ------------------------------------------------------------------ настройки
+
+def _raise_if_bad_key(e: Exception) -> None:
+    """401 от Anthropic — отдаём код, интерфейс покажет понятный текст на своём языке."""
+    if llm.is_auth_error(e):
+        llm.reset_client()
+        raise HTTPException(401, llm.ApiKeyInvalid.code)
+
 
 def _refresh_prefilter(settings: Settings) -> None:
     """Пересчитать «отсеяно / ждут оценки» сразу, не дожидаясь прогона."""
@@ -236,6 +244,7 @@ async def reload_resume() -> dict[str, Any]:
     try:
         structured = await llm.parse_resume(raw, model=settings.scoring_model)
     except Exception as e:
+        _raise_if_bad_key(e)
         raise HTTPException(502, f"Claude не разобрал резюме: {type(e).__name__}: {str(e)[:200]}")
 
     db.save_profile(raw, structured, path.name)

@@ -13,3 +13,7 @@ resume/*
 __pycache__/
 *.pyc
 .DS_Store
+
+# локальные настройки Claude Code
+.claude/settings.local.json
+.claude/check_api_key.py
