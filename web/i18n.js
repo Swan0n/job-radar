@@ -65,6 +65,9 @@ const I18N = {
     'progress.counters': 'найдено {found}, оценено {scored}',
 
     'card.new': 'новое',
+    'card.engTitle': 'Требуемый английский: {level}', 'card.engFits': 'у тебя {mine} — хватает',
+    'card.engAbove': 'у тебя {mine} — требуют выше', 'card.engNone': 'EN не нужен',
+    'card.engNoneTitle': 'Работодатель указал, что английский не требуется',
     'card.skills': 'Навыки и стек', 'card.experience': 'Опыт и грейд', 'card.conditions': 'Условия',
     'card.letter': 'Кавер-леттер', 'card.letterReady': 'Письмо готово', 'card.open': 'Открыть вакансию',
 
@@ -167,6 +170,9 @@ const I18N = {
     'progress.counters': 'знайдено {found}, оцінено {scored}',
 
     'card.new': 'нове',
+    'card.engTitle': 'Потрібна англійська: {level}', 'card.engFits': 'у тебе {mine} — достатньо',
+    'card.engAbove': 'у тебе {mine} — вимагають вище', 'card.engNone': 'EN не потрібна',
+    'card.engNoneTitle': 'Роботодавець вказав, що англійська не потрібна',
     'card.skills': 'Навички та стек', 'card.experience': 'Досвід і грейд', 'card.conditions': 'Умови',
     'card.letter': 'Супровідний лист', 'card.letterReady': 'Лист готовий', 'card.open': 'Відкрити вакансію',
 
@@ -268,6 +274,9 @@ const I18N = {
     'progress.counters': 'found {found}, scored {scored}',
 
     'card.new': 'new',
+    'card.engTitle': 'Required English: {level}', 'card.engFits': 'yours is {mine} — enough',
+    'card.engAbove': 'yours is {mine} — they want more', 'card.engNone': 'No English',
+    'card.engNoneTitle': 'The employer says English is not required',
     'card.skills': 'Skills & stack', 'card.experience': 'Experience & level', 'card.conditions': 'Conditions',
     'card.letter': 'Cover letter', 'card.letterReady': 'Letter ready', 'card.open': 'Open job',
 

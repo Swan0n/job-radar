@@ -7,6 +7,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
+from . import english
+
 DB_PATH = Path(__file__).resolve().parent.parent / "data" / "jobs.db"
 
 SCHEMA = """
@@ -29,6 +31,7 @@ CREATE TABLE IF NOT EXISTS vacancies (
     first_seen    TEXT NOT NULL,
     last_seen     TEXT NOT NULL,
     skip_reason   TEXT,            -- почему предфильтр не пустил к оценке; NULL — пустил
+    english       TEXT,            -- требуемый английский: A1…C2, «none» — не нужен, NULL — не указан
     UNIQUE(source, external_id)
 );
 
@@ -118,9 +121,21 @@ def init_db() -> None:
         if "skip_reason" not in cols:
             # заполнится при следующем прогоне или refresh_prefilter()
             conn.execute("ALTER TABLE vacancies ADD COLUMN skip_reason TEXT")
+        if "english" not in cols:
+            conn.execute("ALTER TABLE vacancies ADD COLUMN english TEXT")
         if conn.execute("PRAGMA user_version").fetchone()[0] < 1:
             _fix_dou_salaries(conn)
             conn.execute("PRAGMA user_version = 1")
+        if conn.execute("PRAGMA user_version").fetchone()[0] < 2:
+            _fill_english(conn)
+            conn.execute("PRAGMA user_version = 2")
+
+
+def _fill_english(conn: sqlite3.Connection) -> None:
+    """Одноразово проставить уровень английского уже собранным вакансиям."""
+    rows = conn.execute("SELECT id, description FROM vacancies WHERE description IS NOT NULL").fetchall()
+    conn.executemany("UPDATE vacancies SET english = ? WHERE id = ?",
+                     [(english.detect(r["description"]), r["id"]) for r in rows])
 
 
 def _fix_dou_salaries(conn: sqlite3.Connection) -> None:
@@ -205,22 +220,28 @@ def upsert_vacancy(v: dict[str, Any]) -> tuple[int, bool]:
                 "UPDATE vacancies SET last_seen = ?, url = ?, title = ?, company = ?, "
                 "location = ?, remote = ?, salary_raw = ?, salary_min = ?, salary_max = ?, "
                 "salary_cur = ?, posted_at = COALESCE(?, posted_at), "
-                "description = COALESCE(?, description) WHERE id = ?",
+                # Короткий текст из карточки не должен затирать полный, скачанный со страницы
+                # вакансии: иначе при следующем прогоне теряется описание (и то, что в нём нашли).
+                "description = CASE WHEN LENGTH(?) > LENGTH(COALESCE(description, '')) "
+                "THEN ? ELSE description END, english = COALESCE(?, english) "
+                "WHERE id = ?",
                 (ts, v["url"], v["title"], v.get("company"), v.get("location"),
                  int(v.get("remote", 0)), v.get("salary_raw"), v.get("salary_min"),
                  v.get("salary_max"), v.get("salary_cur"), v.get("posted_at"),
-                 v.get("description"), row["id"]),
+                 v.get("description"), v.get("description"),
+                 english.detect(v.get("description")), row["id"]),
             )
             return row["id"], False
 
         cur = conn.execute(
             "INSERT INTO vacancies (source, external_id, url, title, company, location, "
             "remote, salary_raw, salary_min, salary_max, salary_cur, posted_at, description, "
-            "query, first_seen, last_seen) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "query, first_seen, last_seen, english) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (v["source"], v["external_id"], v["url"], v["title"], v.get("company"),
              v.get("location"), int(v.get("remote", 0)), v.get("salary_raw"),
              v.get("salary_min"), v.get("salary_max"), v.get("salary_cur"),
-             v.get("posted_at"), v.get("description"), v.get("query"), ts, ts),
+             v.get("posted_at"), v.get("description"), v.get("query"), ts, ts,
+             english.detect(v.get("description"))),
         )
         vid = int(cur.lastrowid)
         conn.execute(
@@ -232,7 +253,9 @@ def upsert_vacancy(v: dict[str, Any]) -> tuple[int, bool]:
 
 def set_description(vacancy_id: int, description: str) -> None:
     with connect() as conn:
-        conn.execute("UPDATE vacancies SET description = ? WHERE id = ?", (description, vacancy_id))
+        # Уже известный уровень не перетираем: у djinni он из поля формы в карточке — точнее текста.
+        conn.execute("UPDATE vacancies SET description = ?, english = COALESCE(english, ?) WHERE id = ?",
+                     (description, english.detect(description), vacancy_id))
 
 
 def save_match(vacancy_id: int, score: float, breakdown: dict, matched: list,

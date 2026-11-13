@@ -237,6 +237,37 @@ function barRow(label, value) {
   return row;
 }
 
+const CEFR = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
+
+// Свой уровень берём из разобранного резюме: languages вроде «English B2» / «Англійська — C1».
+function myEnglish() {
+  for (const lang of state.app?.profile?.languages || []) {
+    if (!/english|англ/i.test(lang)) continue;
+    const m = lang.toUpperCase().replace(/А/g, 'A').replace(/В/g, 'B').replace(/С/g, 'C').match(/\b([ABC][12])\b/);
+    if (m) return m[1];
+    if (/native|рідн|родн/i.test(lang)) return 'C2';
+    if (/fluent|advanced|вільн|свободн/i.test(lang)) return 'C1';
+    if (/upper/i.test(lang)) return 'B2';
+    if (/intermediate/i.test(lang)) return 'B1';
+  }
+  return null;
+}
+
+function englishBadge(level) {
+  if (!level) return null;
+  if (level === 'none') {
+    const b = el('span', 'badge-eng ok', t('card.engNone'));
+    b.title = t('card.engNoneTitle');
+    return b;
+  }
+  const mine = myEnglish();
+  const fits = mine ? CEFR.indexOf(mine) >= CEFR.indexOf(level) : null;
+  const b = el('span', `badge-eng${fits === true ? ' ok' : fits === false ? ' hi' : ''}`, `EN ${level}`);
+  b.title = t('card.engTitle', { level })
+    + (mine ? ' · ' + t(fits ? 'card.engFits' : 'card.engAbove', { mine }) : '');
+  return b;
+}
+
 function renderCard(item) {
   const card = el('div', 'card');
   const head = el('div', 'card-head');
@@ -251,6 +282,8 @@ function renderCard(item) {
   link.href = item.url; link.target = '_blank'; link.rel = 'noopener';
   title.append(link);
   if (item.salary_raw) title.append(' ', el('span', 'badge-salary', item.salary_raw));
+  const eng = englishBadge(item.english);
+  if (eng) title.append(' ', eng);
   if (isNew(item)) title.append(' ', el('span', 'badge-new', t('card.new')));
 
   const meta = el('div', 'meta');
